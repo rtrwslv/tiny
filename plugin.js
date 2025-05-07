@@ -1,15 +1,106 @@
 const TemplateCreator = {
-  templates: (() => {
-    try {
-      return JSON.parse(localStorage.getItem('tinymce_templates') || '[]');
-    } catch (e) {
-      console.error('Failed to read templates from localStorage:', e);
-      return [];
-    }
-  })(),
+  db: null,
+  templates: [],
 
-  init(editor) {
+  async initDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('tinymce_templates_db', 1);
+
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains('templates')) {
+          db.createObjectStore('templates', { keyPath: 'id', autoIncrement: true });
+        }
+      };
+
+      request.onsuccess = (event) => {
+        this.db = event.target.result;
+        resolve(this.db);
+      };
+
+      request.onerror = (event) => {
+        console.error('IndexedDB error:', event.target.error);
+        reject(event.target.error);
+      };
+    });
+  },
+
+  async getAllTemplates() {
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        resolve([]);
+        return;
+      }
+
+      const transaction = this.db.transaction('templates', 'readonly');
+      const store = transaction.objectStore('templates');
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        this.templates = request.result;
+        resolve(this.templates);
+      };
+
+      request.onerror = (event) => {
+        console.error('Error getting templates:', event.target.error);
+        reject(event.target.error);
+      };
+    });
+  },
+
+  async saveTemplate(template) {
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      const transaction = this.db.transaction('templates', 'readwrite');
+      const store = transaction.objectStore('templates');
+      const request = store.add(template);
+
+      request.onsuccess = () => {
+        resolve(request.result);
+      };
+
+      request.onerror = (event) => {
+        console.error('Error saving template:', event.target.error);
+        reject(event.target.error);
+      };
+    });
+  },
+
+  async deleteTemplate(id) {
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      const transaction = this.db.transaction('templates', 'readwrite');
+      const store = transaction.objectStore('templates');
+      const request = store.delete(id);
+
+      request.onsuccess = () => {
+        resolve(true);
+      };
+
+      request.onerror = (event) => {
+        console.error('Error deleting template:', event.target.error);
+        reject(event.target.error);
+      };
+    });
+  },
+
+  async init(editor) {
     const self = this;
+    
+    try {
+      await this.initDB();
+      await this.getAllTemplates();
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+    }
 
     editor.ui.registry.addButton('templatecreator', {
       text: 'Шаблоны',
@@ -22,16 +113,21 @@ const TemplateCreator = {
     });
   },
 
-  saveTemplates() {
-    try {
-      localStorage.setItem('tinymce_templates', JSON.stringify(this.templates));
-    } catch (e) {
-      console.error('Failed to save templates to localStorage:', e);
-    }
-  },
-
-  showInsertTemplateDialog(editor) {
+  async showInsertTemplateDialog(editor) {
     const self = this;
+    
+    try {
+      await this.getAllTemplates();
+    } catch (error) {
+      console.error('Failed to load templates:', error);
+      editor.notificationManager.open({
+        text: 'Ошибка загрузки шаблонов',
+        type: 'error',
+        timeout: 2000
+      });
+      return;
+    }
+
     editor.windowManager.open({
       title: 'Мои шаблоны',
       size: 'large',
@@ -71,7 +167,7 @@ const TemplateCreator = {
         { type: 'cancel', text: 'Закрыть' },
         { type: 'submit', text: 'Вставить', primary: true }
       ],
-      onAction: (api, details) => {
+      onAction: async (api, details) => {
         const data = api.getData();
         const selectedIndex = parseInt(data.template_select, 10);
 
@@ -95,7 +191,8 @@ const TemplateCreator = {
 
         if (details.name === 'delete_btn') {
           if (!isNaN(selectedIndex) && self.templates[selectedIndex]) {
-            const title = self.templates[selectedIndex].title;
+            const template = self.templates[selectedIndex];
+            const title = template.title;
             editor.windowManager.open({
               title: 'Подтверждение удаления',
               body: {
@@ -115,12 +212,21 @@ const TemplateCreator = {
                   primary: true
                 }
               ],
-              onSubmit: (confirmApi) => {
-                self.templates.splice(selectedIndex, 1);
-                self.saveTemplates();
-                confirmApi.close();
-                api.close();
-                self.showInsertTemplateDialog(editor);
+              onSubmit: async (confirmApi) => {
+                try {
+                  await self.deleteTemplate(template.id);
+                  await self.getAllTemplates();
+                  confirmApi.close();
+                  api.close();
+                  self.showInsertTemplateDialog(editor);
+                } catch (error) {
+                  console.error('Failed to delete template:', error);
+                  editor.notificationManager.open({
+                    text: 'Ошибка удаления шаблона',
+                    type: 'error',
+                    timeout: 2000
+                  });
+                }
               }
             });
           }
@@ -137,7 +243,7 @@ const TemplateCreator = {
     });
   },
 
-  showCreateTemplateDialog(editor) {
+  async showCreateTemplateDialog(editor) {
     const self = this;
     editor.windowManager.open({
       title: 'Создать шаблон',
@@ -152,7 +258,7 @@ const TemplateCreator = {
         { type: 'cancel', text: 'Отмена' },
         { type: 'submit', text: 'Сохранить', primary: true }
       ],
-      onSubmit: (api) => {
+      onSubmit: async (api) => {
         const data = api.getData();
         const content = editor.getContent({ format: 'html' }).trim();
         const title = data.title.trim();
@@ -161,19 +267,30 @@ const TemplateCreator = {
           return;
         }
 
-        self.templates.push({
+        const newTemplate = {
           title: title,
           description: data.description.trim(),
           content: content
-        });
-        self.saveTemplates();
-        api.close();
+        };
 
-        editor.notificationManager.open({
-          text: 'Шаблон сохранён',
-          type: 'success',
-          timeout: 2000
-        });
+        try {
+          await self.saveTemplate(newTemplate);
+          await self.getAllTemplates();
+          api.close();
+
+          editor.notificationManager.open({
+            text: 'Шаблон сохранён',
+            type: 'success',
+            timeout: 2000
+          });
+        } catch (error) {
+          console.error('Failed to save template:', error);
+          editor.notificationManager.open({
+            text: 'Ошибка сохранения шаблона',
+            type: 'error',
+            timeout: 2000
+          });
+        }
       }
     });
   }
