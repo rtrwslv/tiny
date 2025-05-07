@@ -1,5 +1,12 @@
 const TemplateCreator = {
-  templates: JSON.parse(localStorage.getItem('tinymce_templates') || '[]'),
+  templates: (() => {
+    try {
+      return JSON.parse(localStorage.getItem('tinymce_templates') || '[]');
+    } catch (e) {
+      console.error('Failed to read templates from localStorage:', e);
+      return [];
+    }
+  })(),
 
   init(editor) {
     const self = this;
@@ -16,7 +23,11 @@ const TemplateCreator = {
   },
 
   saveTemplates() {
-    localStorage.setItem('tinymce_templates', JSON.stringify(this.templates));
+    try {
+      localStorage.setItem('tinymce_templates', JSON.stringify(this.templates));
+    } catch (e) {
+      console.error('Failed to save templates to localStorage:', e);
+    }
   },
 
   showInsertTemplateDialog(editor) {
