@@ -1,11 +1,26 @@
-tinymce.PluginManager.add('templatecreator', function(editor) {
-  let templates = JSON.parse(localStorage.getItem('tinymce_templates') || '[]');
+const TemplateCreator = {
+  templates: JSON.parse(localStorage.getItem('tinymce_templates') || '[]'),
 
-  function saveTemplates() {
-    localStorage.setItem('tinymce_templates', JSON.stringify(templates));
-  }
+  init(editor) {
+    const self = this;
 
-  function showInsertTemplateDialog() {
+    editor.ui.registry.addButton('templatecreator', {
+      text: 'Шаблоны',
+      onAction: () => self.showInsertTemplateDialog(editor)
+    });
+
+    editor.ui.registry.addButton('savetemplate', {
+      text: 'Сохранить шаблон',
+      onAction: () => self.showCreateTemplateDialog(editor)
+    });
+  },
+
+  saveTemplates() {
+    localStorage.setItem('tinymce_templates', JSON.stringify(this.templates));
+  },
+
+  showInsertTemplateDialog(editor) {
+    const self = this;
     editor.windowManager.open({
       title: 'Мои шаблоны',
       size: 'large',
@@ -16,7 +31,7 @@ tinymce.PluginManager.add('templatecreator', function(editor) {
             type: 'selectbox',
             name: 'template_select',
             label: 'Выберите шаблон',
-            items: templates.map((t, i) => ({
+            items: self.templates.map((t, i) => ({
               text: t.title + (t.description ? ` (${t.description})` : ''),
               value: i.toString()
             }))
@@ -50,7 +65,7 @@ tinymce.PluginManager.add('templatecreator', function(editor) {
         const selectedIndex = parseInt(data.template_select, 10);
 
         if (details.name === 'preview_btn') {
-          if (!isNaN(selectedIndex) && templates[selectedIndex]) {
+          if (!isNaN(selectedIndex) && self.templates[selectedIndex]) {
             editor.windowManager.open({
               title: 'Предпросмотр шаблона',
               body: {
@@ -58,7 +73,7 @@ tinymce.PluginManager.add('templatecreator', function(editor) {
                 items: [
                   {
                     type: 'htmlpanel',
-                    html: `<div style="padding:10px;border:1px solid #ccc;">${templates[selectedIndex].content}</div>`
+                    html: `<div style="padding:10px;border:1px solid #ccc;">${self.templates[selectedIndex].content}</div>`
                   }
                 ]
               },
@@ -68,8 +83,8 @@ tinymce.PluginManager.add('templatecreator', function(editor) {
         }
 
         if (details.name === 'delete_btn') {
-          if (!isNaN(selectedIndex) && templates[selectedIndex]) {
-            const title = templates[selectedIndex].title;
+          if (!isNaN(selectedIndex) && self.templates[selectedIndex]) {
+            const title = self.templates[selectedIndex].title;
             editor.windowManager.open({
               title: 'Подтверждение удаления',
               body: {
@@ -90,11 +105,11 @@ tinymce.PluginManager.add('templatecreator', function(editor) {
                 }
               ],
               onSubmit: (confirmApi) => {
-                templates.splice(selectedIndex, 1);
-                saveTemplates();
+                self.templates.splice(selectedIndex, 1);
+                self.saveTemplates();
                 confirmApi.close();
                 api.close();
-                showInsertTemplateDialog();
+                self.showInsertTemplateDialog(editor);
               }
             });
           }
@@ -103,15 +118,16 @@ tinymce.PluginManager.add('templatecreator', function(editor) {
       onSubmit: (api) => {
         const data = api.getData();
         const selectedIndex = parseInt(data.template_select, 10);
-        if (!isNaN(selectedIndex) && templates[selectedIndex]) {
-          editor.insertContent(templates[selectedIndex].content);
+        if (!isNaN(selectedIndex) && self.templates[selectedIndex]) {
+          editor.insertContent(self.templates[selectedIndex].content);
         }
         api.close();
       }
     });
-  }
+  },
 
-  function showCreateTemplateDialog() {
+  showCreateTemplateDialog(editor) {
+    const self = this;
     editor.windowManager.open({
       title: 'Создать шаблон',
       body: {
@@ -134,12 +150,12 @@ tinymce.PluginManager.add('templatecreator', function(editor) {
           return;
         }
 
-        templates.push({
+        self.templates.push({
           title: title,
           description: data.description.trim(),
           content: content
         });
-        saveTemplates();
+        self.saveTemplates();
         api.close();
 
         editor.notificationManager.open({
@@ -150,14 +166,10 @@ tinymce.PluginManager.add('templatecreator', function(editor) {
       }
     });
   }
+};
 
-  editor.ui.registry.addButton('templatecreator', {
-    text: 'Шаблоны',
-    onAction: showInsertTemplateDialog
-  });
-
-  editor.ui.registry.addButton('savetemplate', {
-    text: 'Сохранить шаблон',
-    onAction: showCreateTemplateDialog
-  });
+tinymce.PluginManager.add('templatecreator', (editor) => {
+  const instance = Object.create(TemplateCreator);
+  instance.init(editor);
+  return instance;
 });
