@@ -1,11 +1,7 @@
 const TemplateCreator = {
-  templates: (() => {
-    try {
-      return JSON.parse(localStorage.getItem('tinymce_templates') || '[]');
-    } catch (e) {
-      console.error('Failed to read templates from localStorage:', e);
-      return [];
-    }
+  templates: (function() {
+    const stored = Services.xulStore.getValue("chrome://editor/content/editor.xhtml", "tinymce-templates", "data");
+    return stored ? JSON.parse(stored) : [];
   })(),
 
   init(editor) {
@@ -21,13 +17,9 @@ const TemplateCreator = {
       onAction: () => self.showCreateTemplateDialog(editor)
     });
   },
-
+//a
   saveTemplates() {
-    try {
-      localStorage.setItem('tinymce_templates', JSON.stringify(this.templates));
-    } catch (e) {
-      console.error('Failed to save templates to localStorage:', e);
-    }
+    Services.xulStore.setValue("chrome://editor/content/editor.xhtml", "tinymce-templates", "data", JSON.stringify(this.templates));
   },
 
   showInsertTemplateDialog(editor) {
