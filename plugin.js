@@ -17,7 +17,7 @@ const TemplateCreator = {
       onAction: () => self.showCreateTemplateDialog(editor)
     });
   },
-//a
+//aff
   saveTemplates() {
     Services.xulStore.setValue("chrome://editor/content/editor.xhtml", "tinymce-templates", "data", JSON.stringify(this.templates));
   },
