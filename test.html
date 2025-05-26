@@ -5,15 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>TinyMCE with Font Select</title>
   <script src="./tinymce/js/tinymce/tinymce.min.js" referrerpolicy="origin"></script>
-  <script src="./plugin.js" ></script>
+  <script src="./plugin.js"></script>
 </head>
 <body>
   <textarea id="editor"></textarea>
   <script>
     tinymce.init({
       selector: '#editor',
-      toolbar: 'undo redo italic bold | fontselect fontsizeselect | forecolor backcolor | templatecreator savetemplate',
+      toolbar: 'undo redo italic bold forecolor backcolor | fontselect fontsizeselect | forecolor backcolor | templatecreator savetemplate',
       plugins: 'templatecreator',
+      contextmenu: 'cut copy paste | delete | forecolor backcolor | formats',
+      setup: function (editor) {
+  // Кастомные пункты для cut, copy, paste
+
+  // Пункт "Удалить"
+  editor.ui.registry.addMenuItem('delete', {
+    text: 'Удалить',
+    icon: 'remove',
+    onAction: () => editor.selection.setContent('')
+  });
+
+}
     });
   </script>
 </body>
