@@ -14,18 +14,47 @@
       selector: '#editor',
       toolbar: 'undo redo italic bold forecolor backcolor | fontselect fontsizeselect | forecolor backcolor | templatecreator savetemplate',
       plugins: 'templatecreator',
-      contextmenu: 'cut copy paste | delete | forecolor backcolor | formats',
+      contextmenu: 'cut copy paste | delete | formatting | formats',
       setup: function (editor) {
-  // Кастомные пункты для cut, copy, paste
-
-  // Пункт "Удалить"
-  editor.ui.registry.addMenuItem('delete', {
-    text: 'Удалить',
-    icon: 'remove',
-    onAction: () => editor.selection.setContent('')
-  });
-
-}
+        // Кнопка "Удалить"
+        editor.ui.registry.addMenuItem('delete', {
+          text: 'Удалить',
+          icon: 'remove',
+          onAction: () => editor.selection.setContent('')
+        });
+        
+        // Кнопка "Вырезать" (копирует и удаляет)
+        editor.ui.registry.addMenuItem('cut', {
+          text: 'Вырезать',
+          icon: 'cut',
+          onAction: function() {
+            // Копируем выделенный текст в буфер обмена
+            editor.execCommand('Copy');
+            // Удаляем выделенный текст
+            editor.selection.setContent('');
+          }
+        });
+        
+        // Меню "Форматирование"
+        editor.ui.registry.addNestedMenuItem('formatting', {
+          text: 'Форматирование',
+          icon: 'color-swatch',
+          getSubmenuItems: () => [
+            {
+              type: 'menuitem',
+              text: 'Цвет текста',
+              icon: 'tint',
+              onAction: () => editor.execCommand('mceForeColor')
+            },
+            {
+              type: 'menuitem',
+              text: 'Цвет фона',
+              icon: 'tint',
+              onAction: () => editor.execCommand('mceBackColor')
+            }
+          ]
+        });
+      }
     });
   </script>
 </body>
