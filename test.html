@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>TinyMCE with Font Select</title>
+  <title>TinyMCE with Custom Toolbar and Context Menu</title>
   <script src="./tinymce/js/tinymce/tinymce.min.js" referrerpolicy="origin"></script>
   <script src="./plugin.js"></script>
 </head>
@@ -12,8 +12,8 @@
   <script>
     tinymce.init({
       selector: '#editor',
-      toolbar: 'undo redo italic bold forecolor backcolor | fontselect fontsizeselect | forecolor backcolor | templatecreator savetemplate',
-      plugins: 'templatecreator',
+      toolbar: 'undo redo | styleselect | bold italic | forecolor backcolor | customimage',
+      plugins: 'customimage',
       contextmenu: 'cut copy paste | delete | formatting | formats',
       setup: function (editor) {
         // Кнопка "Удалить"
@@ -28,9 +28,8 @@
           text: 'Вырезать',
           icon: 'cut',
           onAction: function() {
-            // Копируем выделенный текст в буфер обмена
+            // Копируем выделенный текст в буфер обмена и удаляем его
             editor.execCommand('Copy');
-            // Удаляем выделенный текст
             editor.selection.setContent('');
           }
         });

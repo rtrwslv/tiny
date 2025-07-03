@@ -1,178 +1,74 @@
-const TemplateCreator = {
-  templates: (function() {
-    const stored = Services.xulStore.getValue("chrome://editor/content/editor.xhtml", "tinymce-templates", "data");
-    return stored ? JSON.parse(stored) : [];
-  })(),
+tinymce.PluginManager.add('customimage', function(editor) {
 
-  init(editor) {
-    const self = this;
+  // Функция выбора файла
+  function showFilePicker(callback) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = () => callback(input.files[0] || null);
+    input.click();
+  }
 
-    editor.ui.registry.addButton('templatecreator', {
-      text: 'Шаблоны',
-      onAction: () => self.showInsertTemplateDialog(editor)
-    });
+  // Основная функция для отображения диалога
+  function insertImage() {
+    showFilePicker(file => {
+      if (!file) return;
 
-    editor.ui.registry.addButton('savetemplate', {
-      text: 'Сохранить шаблон',
-      onAction: () => self.showCreateTemplateDialog(editor)
-    });
-  },
-//affп
-  saveTemplates() {
-    Services.xulStore.setValue("chrome://editor/content/editor.xhtml", "tinymce-templates", "data", JSON.stringify(this.templates));
-  },
-
-  showInsertTemplateDialog(editor) {
-    const self = this;
-    editor.windowManager.open({
-      title: 'Мои шаблоны',
-      size: 'large',
-      body: {
-        type: 'panel',
-        items: [
+      editor.windowManager.open({
+        title: 'Выберите действие',
+        body: {
+          type: 'panel',
+          items: [
+            {
+              type: 'htmlpanel',
+              html: `<p>Выбран файл: <strong>${file.name}</strong></p>`
+            }
+          ]
+        },
+        buttons: [
           {
-            type: 'selectbox',
-            name: 'template_select',
-            label: 'Выберите шаблон',
-            items: self.templates.map((t, i) => ({
-              text: t.title + (t.description ? ` (${t.description})` : ''),
-              value: i.toString()
-            }))
+            type: 'submit',
+            text: 'Вставить в текст',
+            primary: true,
+            name: 'insert'
           },
           {
-            type: 'bar',
-            columns: 2,
-            items: [
-              {
-                type: 'button',
-                name: 'preview_btn',
-                text: 'Предпросмотр',
-                buttonType: 'secondary'
-              },
-              {
-                type: 'button',
-                name: 'delete_btn',
-                text: 'Удалить',
-                buttonType: 'secondary'
-              }
-            ]
+            type: 'submit',
+            text: 'Добавить как вложение',
+            name: 'attachment'
           }
-        ]
-      },
-      buttons: [
-        { type: 'cancel', text: 'Закрыть' },
-        { type: 'submit', text: 'Вставить', primary: true }
-      ],
-      onAction: (api, details) => {
-        const data = api.getData();
-        const selectedIndex = parseInt(data.template_select, 10);
+        ],
+        onSubmit(api) {
+          const formData = api.getData();
+          console.log('Данные формы:', formData); // Для отладки
 
-        if (details.name === 'preview_btn') {
-          if (!isNaN(selectedIndex) && self.templates[selectedIndex]) {
-            editor.windowManager.open({
-              title: 'Предпросмотр шаблона',
-              body: {
-                type: 'panel',
-                items: [
-                  {
-                    type: 'htmlpanel',
-                    html: `<div style="padding:10px;border:1px solid #ccc;">${self.templates[selectedIndex].content}</div>`
-                  }
-                ]
-              },
-              buttons: [{ type: 'cancel', text: 'Закрыть' }]
-            });
-          }
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            if (formData.insert) {
+              // Вставка изображения в текст
+              editor.insertContent(
+                `<img src="${e.target.result}" alt="${file.name}" title="${file.name}" />`
+              );
+              api.close(); // Закрыть диалог после вставки
+            } else if (formData.attachment) {
+              // Добавление как вложение
+              console.log('Добавление вложения:', file.name); // Для отладки
+              editor.insertContent(
+                `<div class="attachment-placeholder">Вложение: <strong>${file.name}</strong></div>`
+              );
+              api.close(); // Закрыть диалог после добавления
+            }
+          };
+          reader.readAsDataURL(file);
         }
-
-        if (details.name === 'delete_btn') {
-          if (!isNaN(selectedIndex) && self.templates[selectedIndex]) {
-            const title = self.templates[selectedIndex].title;
-            editor.windowManager.open({
-              title: 'Подтверждение удаления',
-              body: {
-                type: 'panel',
-                items: [
-                  {
-                    type: 'htmlpanel',
-                    html: `<p>Вы уверены, что хотите удалить шаблон <strong>"${title}"</strong>?</p>`
-                  }
-                ]
-              },
-              buttons: [
-                { type: 'cancel', text: 'Отмена' },
-                {
-                  type: 'submit',
-                  text: 'Удалить',
-                  primary: true
-                }
-              ],
-              onSubmit: (confirmApi) => {
-                self.templates.splice(selectedIndex, 1);
-                self.saveTemplates();
-                confirmApi.close();
-                api.close();
-                self.showInsertTemplateDialog(editor);
-              }
-            });
-          }
-        }
-      },
-      onSubmit: (api) => {
-        const data = api.getData();
-        const selectedIndex = parseInt(data.template_select, 10);
-        if (!isNaN(selectedIndex) && self.templates[selectedIndex]) {
-          editor.insertContent(self.templates[selectedIndex].content);
-        }
-        api.close();
-      }
-    });
-  },
-
-  showCreateTemplateDialog(editor) {
-    const self = this;
-    editor.windowManager.open({
-      title: 'Создать шаблон',
-      body: {
-        type: 'panel',
-        items: [
-          { type: 'input', name: 'title', label: 'Название' },
-          { type: 'textarea', name: 'description', label: 'Описание' }
-        ]
-      },
-      buttons: [
-        { type: 'cancel', text: 'Отмена' },
-        { type: 'submit', text: 'Сохранить', primary: true }
-      ],
-      onSubmit: (api) => {
-        const data = api.getData();
-        const content = editor.getContent({ format: 'html' }).trim();
-        const title = data.title.trim();
-        if (!title || !content) {
-          editor.windowManager.alert('Название и содержимое шаблона не должны быть пустыми!');
-          return;
-        }
-
-        self.templates.push({
-          title: title,
-          description: data.description.trim(),
-          content: content
-        });
-        self.saveTemplates();
-        api.close();
-
-        editor.notificationManager.open({
-          text: 'Шаблон сохранён',
-          type: 'success',
-          timeout: 2000
-        });
-      }
+      });
     });
   }
-};
 
-tinymce.PluginManager.add('templatecreator', (editor) => {
-  const instance = Object.create(TemplateCreator);
-  instance.init(editor);
-  return instance;
+  // Регистрация кнопки в редакторе
+  editor.ui.registry.addButton('customimage', {
+    icon: 'image',
+    tooltip: 'Вставить изображение',
+    onAction: insertImage
+  });
 });
