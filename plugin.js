@@ -1,6 +1,4 @@
 tinymce.PluginManager.add('customimage', function(editor) {
-
-  // Функция выбора файла
   function showFilePicker(callback) {
     const input = document.createElement('input');
     input.type = 'file';
@@ -9,11 +7,9 @@ tinymce.PluginManager.add('customimage', function(editor) {
     input.click();
   }
 
-  // Основная функция для отображения диалога
   function insertImage() {
     showFilePicker(file => {
       if (!file) return;
-
       editor.windowManager.open({
         title: 'Выберите действие',
         body: {
@@ -27,45 +23,30 @@ tinymce.PluginManager.add('customimage', function(editor) {
         },
         buttons: [
           {
-            type: 'submit',
+            type: 'custom',
             text: 'Вставить в текст',
             primary: true,
             name: 'insert'
           },
           {
-            type: 'submit',
+            type: 'custom',
             text: 'Добавить как вложение',
             name: 'attachment'
           }
         ],
-        onSubmit(api) {
-          const formData = api.getData();
-          console.log('Данные формы:', formData); // Для отладки
-
-          const reader = new FileReader();
-          reader.onload = function(e) {
-            if (formData.insert) {
-              // Вставка изображения в текст
-              editor.insertContent(
-                `<img src="${e.target.result}" alt="${file.name}" title="${file.name}" />`
-              );
-              api.close(); // Закрыть диалог после вставки
-            } else if (formData.attachment) {
-              // Добавление как вложение
-              console.log('Добавление вложения:', file.name); // Для отладки
-              editor.insertContent(
-                `<div class="attachment-placeholder">Вложение: <strong>${file.name}</strong></div>`
-              );
-              api.close(); // Закрыть диалог после добавления
-            }
-          };
-          reader.readAsDataURL(file);
-        }
+        onAction: (api, details) => {
+          if (details.name === "attachment") {
+            console.log("Файл добавлен как вложение:", file);
+          } else if (details.name === "insert") {
+            const imgTag = `<img src="${URL.createObjectURL(file)}" alt="${file.name}" />`;
+            editor.insertContent(imgTag);
+          }
+          api.close();
+        },
       });
     });
   }
 
-  // Регистрация кнопки в редакторе
   editor.ui.registry.addButton('customimage', {
     icon: 'image',
     tooltip: 'Вставить изображение',
