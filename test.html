@@ -6,6 +6,16 @@
   <title>TinyMCE with Custom Toolbar and Context Menu</title>
   <script src="./tinymce/js/tinymce/tinymce.min.js" referrerpolicy="origin"></script>
   <script src="./plugin.js"></script>
+  <style>
+    .plain-text {
+      font-family: inherit;
+      font-size: inherit;
+      color: inherit;
+      margin: 0;
+      padding: 0;
+      line-height: inherit;
+    }
+  </style>
 </head>
 <body>
   <textarea id="editor"></textarea>
@@ -14,7 +24,32 @@
       selector: '#editor',
       toolbar: 'undo redo | styleselect | bold italic | forecolor backcolor | customimage',
       plugins: 'customimage',
-      contextmenu: 'cut copy paste | delete | formatting | formats',
+      contextmenu: 'cut copy paste | delete | formatting | formats | plainText',
+      style_formats: [
+        {
+          title: 'Обычный текст',
+          inline: 'span',
+          classes: 'plain-text'
+        },
+        {
+          title: 'Заголовок 1',
+          block: 'h1'
+        },
+        {
+          title: 'Заголовок 2',
+          block: 'h2'
+        }
+      ],
+      forced_root_block: 'p',
+      forced_root_block_attrs: {
+        'class': 'plain-text'
+      },
+      content_style: `
+        p.plain-text {
+          margin: 0;
+          line-height: 1.2;
+        }
+      `,
       setup: function (editor) {
         // Кнопка "Удалить"
         editor.ui.registry.addMenuItem('delete', {
@@ -52,6 +87,15 @@
               onAction: () => editor.execCommand('mceBackColor')
             }
           ]
+        });
+
+        // Пункт меню "Обычный текст" для контекстного меню
+        editor.ui.registry.addMenuItem('plainText', {
+          text: 'Обычный текст',
+          icon: 'remove-format',
+          onAction: () => {
+            editor.formatter.apply('plain-text');
+          }
         });
       }
     });
