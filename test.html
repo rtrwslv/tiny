@@ -15,6 +15,12 @@
       padding: 0;
       line-height: inherit;
     }
+    .custom-paragraph {
+      font-family: Georgia, serif;
+      margin: 15px;
+      font-size: 16px;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
@@ -24,12 +30,20 @@
       selector: '#editor',
       toolbar: 'undo redo | styleselect | bold italic | forecolor backcolor | customimage',
       plugins: 'customimage',
-      contextmenu: 'cut copy paste | delete | formatting | formats | plainText',
+      contextmenu: 'cut copy paste | delete | formatting | formats',
+      font_formats: 'Arial=Arial,Helvetica,sans-serif;Georgia=Georgia,serif;Times New Roman=Times New Roman,Times,serif',
       style_formats: [
         {
           title: 'Обычный текст',
-          inline: 'span',
-          classes: 'plain-text'
+          block: 'p',
+          classes: 'plain-text',
+          exact: true
+        },
+        {
+          title: 'Пользовательский параграф',
+          block: 'p',
+          classes: 'custom-paragraph',
+          exact: true
         },
         {
           title: 'Заголовок 1',
@@ -45,31 +59,41 @@
         'class': 'plain-text'
       },
       content_style: `
-        p.plain-text {
+        .plain-text {
+          font-family: inherit;
+          font-size: inherit;
+          color: inherit;
           margin: 0;
-          line-height: 1.2;
+          padding: 0;
+          line-height: inherit;
+        }
+        .custom-paragraph {
+          font-family: Georgia, serif;
+          margin: 15px;
+          font-size: 16px;
+          line-height: 1.5;
+        }
+        body {
+          font-family: Arial, sans-serif;
+          font-size: 16px;
         }
       `,
       setup: function (editor) {
-        // Кнопка "Удалить"
         editor.ui.registry.addMenuItem('delete', {
           text: 'Удалить',
           icon: 'remove',
           onAction: () => editor.selection.setContent('')
         });
         
-        // Кнопка "Вырезать" (копирует и удаляет)
         editor.ui.registry.addMenuItem('cut', {
           text: 'Вырезать',
           icon: 'cut',
           onAction: function() {
-            // Копируем выделенный текст в буфер обмена и удаляем его
             editor.execCommand('Copy');
             editor.selection.setContent('');
           }
         });
         
-        // Меню "Форматирование"
         editor.ui.registry.addNestedMenuItem('formatting', {
           text: 'Форматирование',
           icon: 'color-swatch',
@@ -87,15 +111,6 @@
               onAction: () => editor.execCommand('mceBackColor')
             }
           ]
-        });
-
-        // Пункт меню "Обычный текст" для контекстного меню
-        editor.ui.registry.addMenuItem('plainText', {
-          text: 'Обычный текст',
-          icon: 'remove-format',
-          onAction: () => {
-            editor.formatter.apply('plain-text');
-          }
         });
       }
     });
