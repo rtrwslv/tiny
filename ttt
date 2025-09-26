@@ -1,107 +1,81 @@
-<div class="qfb-splitbutton" id="qfb-tags">
-  <button class="qfb-filterbutton" id="qfb-tags-main">
-    <span class="tag-icon">🏷</span> Метки ▾
+<!-- Split button для тегов -->
+<div id="qfb-tags-splitbutton" class="qfb-splitbutton">
+  <!-- Левая часть кнопки: фильтрует по всем тегам -->
+  <button id="qfb-tags-main" class="qfb-filterbutton-left">
+    🏷 Все метки
   </button>
-  <ul id="qfb-tags-menu" class="qfb-menu hidden">
-    <li data-tag="$label1"><span class="tag-dot red"></span> Важное</li>
-    <li data-tag="$label2"><span class="tag-dot blue"></span> Рабочее</li>
-    <li data-tag="$label3"><span class="tag-dot green"></span> Личное</li>
-    <li data-tag="$label4"><span class="tag-dot orange"></span> К исполнению</li>
-    <li data-tag="$label5"><span class="tag-dot purple"></span> Отложено</li>
-    <li class="divider"></li>
-    <li data-action="reset"><span class="tag-reset">✕</span> Сбросить всё</li>
-  </ul>
+
+  <!-- Правая часть кнопки: открывает popup -->
+  <button id="qfb-tags-dropdown" class="qfb-filterbutton-right">
+    ▾
+  </button>
+
+  <!-- Popup для выбора отдельных тегов -->
+  <menupopup id="qfb-tags-popup" hidden="true">
+    <menuitem label="Важное" data-tag="$label1"/>
+    <menuitem label="Рабочее" data-tag="$label2"/>
+    <menuitem label="Личное" data-tag="$label3"/>
+    <menuitem label="К исполнению" data-tag="$label4"/>
+    <menuitem label="Отложено" data-tag="$label5"/>
+    <menuseparator/>
+    <menuitem label="Сбросить всё" data-action="reset"/>
+  </menupopup>
 </div>
 
 .qfb-splitbutton {
-  position: relative;
-  display: inline-block;
+  display: inline-flex;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
-.qfb-filterbutton {
+.qfb-splitbutton button {
+  border: none;
+  background: #f9f9f9;
   padding: 4px 8px;
-  border-radius: 4px;
   cursor: pointer;
 }
 
-.qfb-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  background: var(--toolbar-bg);
-  border: 1px solid var(--chrome-content-separator-color);
-  border-radius: 4px;
-  list-style: none;
-  padding: 4px 0;
-  margin: 4px 0 0 0;
-  min-width: 180px;
-  z-index: 1000;
+.qfb-filterbutton-left {
+  flex: 1;
 }
 
-.qfb-menu.hidden {
-  display: none;
-}
-
-.qfb-menu li {
-  padding: 6px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-}
-
-.qfb-menu li:hover {
-  background: var(--toolbarbutton-hover-background);
-}
-
-.qfb-menu .divider {
-  border-top: 1px solid var(--chrome-content-separator-color);
-  margin: 4px 0;
-  padding: 0;
-}
-
-.tag-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 8px;
-}
-
-.tag-dot.red { background: #e53935; }
-.tag-dot.blue { background: #1e88e5; }
-.tag-dot.green { background: #43a047; }
-.tag-dot.orange { background: #fb8c00; }
-.tag-dot.purple { background: #8e24aa; }
-
-.tag-reset {
-  margin-right: 8px;
-  color: #777;
+.qfb-filterbutton-right {
+  width: 24px;
+  text-align: center;
+  border-left: 1px solid #ccc;
+  background: #eaeaea;
 }
 
 
-let tagsBtn = document.getElementById("qfb-tags-main");
-let tagsMenu = document.getElementById("qfb-tags-menu");
+let mainButton = document.getElementById("qfb-tags-main");
+let dropdownButton = document.getElementById("qfb-tags-dropdown");
+let tagsPopup = document.getElementById("qfb-tags-popup");
 
-// показать/скрыть меню
-tagsBtn.addEventListener("click", e => {
-  e.stopPropagation();
-  tagsMenu.classList.toggle("hidden");
+// Левая часть: фильтр по всем тегам
+mainButton.addEventListener("click", () => {
+  console.log("Фильтруем по всем меткам");
+  // Тут вызываешь функцию фильтрации всех тегов
 });
 
-// выбор пункта
-tagsMenu.addEventListener("click", e => {
-  if (e.target.closest("li")) {
-    let li = e.target.closest("li");
-    if (li.dataset.tag) {
-      QuickFilterManager.setFilter("tags", { key: li.dataset.tag });
-      QuickFilterBarMuxer.deferredUpdateSearch();
-    } else if (li.dataset.action === "reset") {
-      QuickFilterManager.clearFilter("tags");
-      QuickFilterBarMuxer.deferredUpdateSearch();
-    }
-    tagsMenu.classList.add("hidden");
+// Правая часть: открытие popup
+dropdownButton.addEventListener("click", () => {
+  if (tagsPopup.state === "open") {
+    tagsPopup.hidePopup();
+  } else {
+    tagsPopup.openPopup(dropdownButton, "after_start", 0, 0, false, false);
   }
 });
 
-// закрывать меню при клике вне
-document.addEventListener("click", () => tagsMenu.classList.add("hidden"));
+// Обработка выбора отдельного тега или сброса
+tagsPopup.addEventListener("command", event => {
+  let target = event.target;
+  if (target.dataset.tag) {
+    console.log("Выбран тег:", target.dataset.tag);
+    // Здесь фильтр по конкретному тегу
+  } else if (target.dataset.action === "reset") {
+    console.log("Сбросить всё");
+    // Здесь сброс фильтров
+  }
+  tagsPopup.hidePopup();
+});
