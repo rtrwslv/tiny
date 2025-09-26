@@ -1,0 +1,76 @@
+<div class="qfb-splitbutton" id="qfb-tags">
+  <button class="qfb-filterbutton main" id="qfb-tags-main"
+          tooltiptext="Фильтровать по всем меткам">
+    Метки
+  </button>
+  <button class="qfb-filterbutton arrow" id="qfb-tags-arrow">▾</button>
+  <ul id="qfb-tags-menu" class="qfb-menu hidden">
+    <li data-tag="1">Метка 1</li>
+    <li data-tag="2">Метка 2</li>
+    <li data-tag="3">Метка 3</li>
+    <li data-tag="4">Метка 4</li>
+    <li data-tag="5">Метка 5</li>
+    <li data-tag="6">Метка 6</li>
+  </ul>
+</div>
+
+
+let tagsMain = document.getElementById("qfb-tags-main");
+let tagsArrow = document.getElementById("qfb-tags-arrow");
+let tagsMenu = document.getElementById("qfb-tags-menu");
+
+tagsMain.addEventListener("click", () => {
+  QuickFilterManager.setFilter("tags", { any: true });
+  QuickFilterBarMuxer.deferredUpdateSearch();
+});
+
+tagsArrow.addEventListener("click", () => {
+  tagsMenu.classList.toggle("hidden");
+});
+
+tagsMenu.addEventListener("click", e => {
+  if (e.target.tagName === "LI") {
+    let tagId = e.target.dataset.tag;
+    QuickFilterManager.setFilter("tags", { id: tagId });
+    QuickFilterBarMuxer.deferredUpdateSearch();
+    tagsMenu.classList.add("hidden");
+  }
+});
+
+
+.qfb-splitbutton {
+  display: inline-flex;
+  position: relative;
+}
+
+.qfb-filterbutton.main {
+  border-radius: 2px 0 0 2px;
+}
+
+.qfb-filterbutton.arrow {
+  border-radius: 0 2px 2px 0;
+  width: 20px;
+  padding: 0;
+}
+
+.qfb-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--toolbar-bg);
+  border: 1px solid var(--chrome-content-separator-color);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  min-width: 120px;
+  z-index: 10;
+}
+.qfb-menu.hidden { display: none; }
+
+.qfb-menu li {
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.qfb-menu li:hover {
+  background-color: var(--toolbarbutton-hover-background);
+}
