@@ -1,75 +1,41 @@
 <div class="qfb-splitbutton" id="qfb-tags">
-  <button class="qfb-filterbutton" id="qfb-tags-main"
-          tooltiptext="Фильтровать по всем меткам">
-    Метки
+  <button class="qfb-filterbutton" id="qfb-tags-main">
+    <span class="tag-icon">🏷</span> Метки ▾
   </button>
-  <button class="qfb-filterbutton arrow" id="qfb-tags-arrow"
-          tooltiptext="Выбрать метку">▾</button>
   <ul id="qfb-tags-menu" class="qfb-menu hidden">
-    <li data-tag="$label1">Метка 1</li>
-    <li data-tag="$label2">Метка 2</li>
-    <li data-tag="$label3">Метка 3</li>
-    <li data-tag="$label4">Метка 4</li>
-    <li data-tag="$label5">Метка 5</li>
-    <li data-tag="$label6">Метка 6</li>
+    <li data-tag="$label1"><span class="tag-dot red"></span> Важное</li>
+    <li data-tag="$label2"><span class="tag-dot blue"></span> Рабочее</li>
+    <li data-tag="$label3"><span class="tag-dot green"></span> Личное</li>
+    <li data-tag="$label4"><span class="tag-dot orange"></span> К исполнению</li>
+    <li data-tag="$label5"><span class="tag-dot purple"></span> Отложено</li>
+    <li class="divider"></li>
+    <li data-action="reset"><span class="tag-reset">✕</span> Сбросить всё</li>
   </ul>
 </div>
 
-let tagsMain = document.getElementById("qfb-tags-main");
-let tagsArrow = document.getElementById("qfb-tags-arrow");
-let tagsMenu = document.getElementById("qfb-tags-menu");
-
-// Клик по основной кнопке → фильтр по всем меткам
-tagsMain.addEventListener("click", () => {
-  QuickFilterManager.setFilter("tags", { any: true });
-  QuickFilterBarMuxer.deferredUpdateSearch();
-});
-
-// Клик по стрелочке → показать/скрыть меню
-tagsArrow.addEventListener("click", e => {
-  e.stopPropagation(); // чтобы клик не уходил наверх
-  tagsMenu.classList.toggle("hidden");
-});
-
-// Клик по элементу меню → фильтрация по конкретной метке
-tagsMenu.addEventListener("click", e => {
-  if (e.target.tagName === "LI") {
-    let tagKey = e.target.dataset.tag;
-    QuickFilterManager.setFilter("tags", { key: tagKey });
-    QuickFilterBarMuxer.deferredUpdateSearch();
-    tagsMenu.classList.add("hidden");
-  }
-});
-
-// Скрывать меню при клике вне
-document.addEventListener("click", () => tagsMenu.classList.add("hidden"));
-
 .qfb-splitbutton {
-  display: inline-flex;
   position: relative;
+  display: inline-block;
 }
 
-#qfb-tags-main {
-  border-radius: 2px 0 0 2px;
-}
-
-#qfb-tags-arrow {
-  border-radius: 0 2px 2px 0;
-  width: 20px;
-  padding: 0;
+.qfb-filterbutton {
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 .qfb-menu {
   position: absolute;
   top: 100%;
-  right: 0;
+  left: 0;
   background: var(--toolbar-bg);
   border: 1px solid var(--chrome-content-separator-color);
+  border-radius: 4px;
   list-style: none;
-  padding: 0;
-  margin: 0;
-  min-width: 120px;
-  z-index: 10;
+  padding: 4px 0;
+  margin: 4px 0 0 0;
+  min-width: 180px;
+  z-index: 1000;
 }
 
 .qfb-menu.hidden {
@@ -77,10 +43,65 @@ document.addEventListener("click", () => tagsMenu.classList.add("hidden"));
 }
 
 .qfb-menu li {
-  padding: 4px 8px;
+  padding: 6px 12px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
 }
 
 .qfb-menu li:hover {
-  background-color: var(--toolbarbutton-hover-background);
+  background: var(--toolbarbutton-hover-background);
 }
+
+.qfb-menu .divider {
+  border-top: 1px solid var(--chrome-content-separator-color);
+  margin: 4px 0;
+  padding: 0;
+}
+
+.tag-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.tag-dot.red { background: #e53935; }
+.tag-dot.blue { background: #1e88e5; }
+.tag-dot.green { background: #43a047; }
+.tag-dot.orange { background: #fb8c00; }
+.tag-dot.purple { background: #8e24aa; }
+
+.tag-reset {
+  margin-right: 8px;
+  color: #777;
+}
+
+
+let tagsBtn = document.getElementById("qfb-tags-main");
+let tagsMenu = document.getElementById("qfb-tags-menu");
+
+// показать/скрыть меню
+tagsBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  tagsMenu.classList.toggle("hidden");
+});
+
+// выбор пункта
+tagsMenu.addEventListener("click", e => {
+  if (e.target.closest("li")) {
+    let li = e.target.closest("li");
+    if (li.dataset.tag) {
+      QuickFilterManager.setFilter("tags", { key: li.dataset.tag });
+      QuickFilterBarMuxer.deferredUpdateSearch();
+    } else if (li.dataset.action === "reset") {
+      QuickFilterManager.clearFilter("tags");
+      QuickFilterBarMuxer.deferredUpdateSearch();
+    }
+    tagsMenu.classList.add("hidden");
+  }
+});
+
+// закрывать меню при клике вне
+document.addEventListener("click", () => tagsMenu.classList.add("hidden"));
