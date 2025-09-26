@@ -1,53 +1,59 @@
 <div class="qfb-splitbutton" id="qfb-tags">
-  <button class="qfb-filterbutton main" id="qfb-tags-main"
+  <button class="qfb-filterbutton" id="qfb-tags-main"
           tooltiptext="Фильтровать по всем меткам">
     Метки
   </button>
-  <button class="qfb-filterbutton arrow" id="qfb-tags-arrow">▾</button>
+  <button class="qfb-filterbutton arrow" id="qfb-tags-arrow"
+          tooltiptext="Выбрать метку">▾</button>
   <ul id="qfb-tags-menu" class="qfb-menu hidden">
-    <li data-tag="1">Метка 1</li>
-    <li data-tag="2">Метка 2</li>
-    <li data-tag="3">Метка 3</li>
-    <li data-tag="4">Метка 4</li>
-    <li data-tag="5">Метка 5</li>
-    <li data-tag="6">Метка 6</li>
+    <li data-tag="$label1">Метка 1</li>
+    <li data-tag="$label2">Метка 2</li>
+    <li data-tag="$label3">Метка 3</li>
+    <li data-tag="$label4">Метка 4</li>
+    <li data-tag="$label5">Метка 5</li>
+    <li data-tag="$label6">Метка 6</li>
   </ul>
 </div>
-
 
 let tagsMain = document.getElementById("qfb-tags-main");
 let tagsArrow = document.getElementById("qfb-tags-arrow");
 let tagsMenu = document.getElementById("qfb-tags-menu");
 
+// Клик по основной кнопке → фильтр по всем меткам
 tagsMain.addEventListener("click", () => {
   QuickFilterManager.setFilter("tags", { any: true });
   QuickFilterBarMuxer.deferredUpdateSearch();
 });
 
-tagsArrow.addEventListener("click", () => {
+// Клик по стрелочке → показать/скрыть меню
+tagsArrow.addEventListener("click", e => {
+  e.stopPropagation(); // чтобы клик не уходил наверх
   tagsMenu.classList.toggle("hidden");
 });
 
+// Клик по элементу меню → фильтрация по конкретной метке
 tagsMenu.addEventListener("click", e => {
   if (e.target.tagName === "LI") {
-    let tagId = e.target.dataset.tag;
-    QuickFilterManager.setFilter("tags", { id: tagId });
+    let tagKey = e.target.dataset.tag;
+    QuickFilterManager.setFilter("tags", { key: tagKey });
     QuickFilterBarMuxer.deferredUpdateSearch();
     tagsMenu.classList.add("hidden");
   }
 });
 
+// Скрывать меню при клике вне
+document.addEventListener("click", () => tagsMenu.classList.add("hidden"));
 
 .qfb-splitbutton {
   display: inline-flex;
   position: relative;
 }
 
-.qfb-filterbutton.main {
+#qfb-tags-main {
   border-radius: 2px 0 0 2px;
 }
 
-.qfb-filterbutton.arrow {
+#qfb-tags-arrow {
   border-radius: 0 2px 2px 0;
   width: 20px;
   padding: 0;
@@ -65,12 +71,16 @@ tagsMenu.addEventListener("click", e => {
   min-width: 120px;
   z-index: 10;
 }
-.qfb-menu.hidden { display: none; }
+
+.qfb-menu.hidden {
+  display: none;
+}
 
 .qfb-menu li {
   padding: 4px 8px;
   cursor: pointer;
 }
+
 .qfb-menu li:hover {
   background-color: var(--toolbarbutton-hover-background);
 }
