@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Label picker — мультивыбор</title>
+  <style>
+    body{font-family:Inter,Arial,sans-serif;padding:40px;background:#f6f7fb;color:#111827}
+    .label-picker{display:inline-block;position:relative}
+    .label-button{
+      display:flex;align-items:center;gap:4px;
+      min-width:100px;height:40px;
+      border:1px solid #e6e9ee;border-radius:6px;
+      background:#fff;padding:0 10px;cursor:pointer;
+    }
+    .icon{width:20px;height:20px;display:grid;place-items:center}
+    .tag-strips{
+      display:flex;gap:2px;align-items:center;height:24px;
+    }
+    .tag-strip{width:6px;height:100%;border-radius:3px}
+    .chev{margin-left:auto;transition:transform .18s}
+    .label-picker.open .chev{transform:rotate(180deg)}
+    .label-menu{
+      position:absolute;top:calc(100% + 4px);left:0;
+      width:200px;background:#fff;
+      border:1px solid #e6e9ee;border-radius:6px;
+      padding:4px;list-style:none;margin:0;display:none;
+    }
+    .label-menu.show{display:block}
+    .label-menu li{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;font-size:14px}
+    .label-menu li:hover{background:#f8fafc}
+    .dot{width:12px;height:12px;border-radius:3px}
+    .check{margin-left:auto;opacity:0}
+    .label-menu li[aria-checked="true"]{font-weight:600}
+    .label-menu li[aria-checked="true"] .check{opacity:1}
+    .clear{color:#6b7280}
+  </style>
+</head>
+<body>
+  <div class="label-picker" id="labelPicker">
+    <div class="label-button" id="labelButton">
+      <span class="icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20 10v6a2 2 0 0 1-2 2h-6l-8-8 8-8h6a2 2 0 0 1 2 2v6z" fill="#CBD5E1"/></svg>
+      </span>
+      <div class="tag-strips" id="tagStrips"></div>
+      <span class="chev">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#374151" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+    </div>
+    <ul class="label-menu" id="labelMenu"></ul>
+  </div>
+
+  <script>
+    (function(){
+      const data=[
+        {id:'important',label:'Важное',color:'#ef4444'},
+        {id:'work',label:'Рабочее',color:'#f97316'},
+        {id:'personal',label:'Личное',color:'#10b981'},
+        {id:'todo',label:'К исполнению',color:'#3b82f6'},
+        {id:'later',label:'Отложено',color:'#a78bfa'}
+      ];
+      const picker=document.getElementById('labelPicker');
+      const button=document.getElementById('labelButton');
+      const menu=document.getElementById('labelMenu');
+      const strips=document.getElementById('tagStrips');
+      let selectedIds=new Set(),menuOpen=false;
+
+      function renderMenu(){
+        menu.innerHTML='';
+        data.forEach(item=>{
+          const li=document.createElement('li');
+          const checked=selectedIds.has(item.id);
+          li.dataset.id=item.id;li.dataset.color=item.color;
+          li.setAttribute('aria-checked',String(checked));
+          li.innerHTML=`<span class="dot" style="background:${item.color}"></span><span>${item.label}</span><span class="check">✔</span>`;
+          li.addEventListener('click', e => { e.stopPropagation(); toggleTag(item.id); });
+          menu.appendChild(li);
+        });
+        const reset=document.createElement('li');reset.className='clear';reset.textContent='Сбросить всё';
+        reset.addEventListener('click', e => { e.stopPropagation(); clearSelection(); closeMenu(); });
+        menu.appendChild(reset);
+      }
+
+      function renderStrips(){
+        strips.innerHTML='';
+        selectedIds.forEach(id=>{
+          const f=data.find(d=>d.id===id);
+          if(f){
+            const span=document.createElement('span');
+            span.className='tag-strip';
+            span.style.background=f.color;
+            strips.appendChild(span);
+          }
+        });
+      }
+
+      function toggleTag(id){
+        if(selectedIds.has(id)) selectedIds.delete(id);
+        else selectedIds.add(id);
+        renderMenu(); renderStrips();
+      }
+
+      function clearSelection(){
+        selectedIds.clear(); renderMenu(); renderStrips();
+      }
+
+      function openMenu(){menu.classList.add('show'); picker.classList.add('open'); menuOpen=true}
+      function closeMenu(){menu.classList.remove('show'); picker.classList.remove('open'); menuOpen=false}
+
+      button.addEventListener('click', e => {
+        if(e.target.closest('.chev')){ menuOpen?closeMenu():openMenu(); return; }
+        picker.classList.toggle('pressed'); if(menuOpen) closeMenu();
+      });
+
+      document.addEventListener('click', e => { if(menuOpen && !picker.contains(e.target)) closeMenu(); });
+
+      renderMenu();
+    })();
+  </script>
+</body>
+</html>
