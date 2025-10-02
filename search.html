@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Поисковая строка с пилсами</title>
+<style>
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background: #fafafa; }
+.search-container {
+  display: flex;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  padding: 6px 10px;
+  min-height: 45px;
+  width: 600px;
+  background: #f7f7f7;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.pills {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  max-width: 100%;
+}
+.pill {
+  display: flex;
+  align-items: center;
+  border-radius: 12px;
+  font-size: 14px;
+  background: transparent;
+  flex: 0 0 auto;
+  height: 32px;
+}
+.pill.selected { box-shadow: 0 0 0 2px #007acc; }
+.pill-type {
+  display: flex;
+  align-items: center;
+  background: #e0e0e0;
+  padding: 0 10px;
+  cursor: pointer;
+  border-radius: 12px 0 0 12px;
+  font-weight: 500;
+  color: #333;
+  height: 32px;
+  position: relative;
+  z-index: 10; /* чтобы dropdown был поверх */
+}
+.pill-type:hover { background: #d0d0d0; }
+.pill-type span.label { margin-right: 6px; }
+.chevron { transition: transform 0.2s; font-size: 12px; color: #666; }
+.pill-type.open .chevron { transform: rotate(180deg); }
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  display: none;
+  min-width: 80px;
+}
+.dropdown.show { display: block; }
+.dropdown div {
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+.dropdown div:hover { background: #f0f0f0; }
+.pill-text {
+  background: #f0f0f0;
+  padding: 0 12px;
+  color: #333;
+  cursor: default;
+  border-radius: 0 12px 12px 0;
+  display: flex;
+  align-items: center;
+  height: 32px;
+}
+.pill-text.editable {
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 0 12px 12px 0;
+  padding: 0 10px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+}
+#searchInput {
+  border: none;
+  outline: none;
+  background: transparent;
+  flex: 1;
+  min-width: 50px;
+  height: 32px;
+  line-height: 32px;
+}
+.buttons { margin-top: 20px; }
+.buttons button {
+  margin-right: 12px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  background: #e0e0e0;
+  transition: background 0.2s;
+  font-weight: 500;
+}
+.buttons button:hover { background: #d0d0d0; }
+</style>
+</head>
+<body>
+
+<div class="search-container">
+  <div id="pills" class="pills"></div>
+  <input id="searchInput" type="text" placeholder="Введите текст...">
+</div>
+
+<div class="buttons">
+  <button onclick="addPill({ type: 'user', text: 'Иван' })">Добавить User</button>
+  <button onclick="addPill({ type: 'theme', text: 'Природа' })">Добавить Theme</button>
+  <button onclick="addPill({ type: 'body', text: 'Текст тела' })">Добавить Body</button>
+</div>
+
+<script>
+const typeLabels = { user: "От", recipient: "Кому", theme: "Тема", body: "Тело" };
+const replacementRules = {
+  theme: ["body"],
+  body: ["theme"],
+  user: ["recipient","body"],
+  recipient: ["user","body"]
+};
+
+let lastSelectedPill = null;
+
+function addPill(data) {
+  const pill = document.createElement("div");
+  pill.className = "pill";
+
+  const typeContainer = document.createElement("div");
+  typeContainer.className = "pill-type";
+
+  const label = document.createElement("span");
+  label.className = "label";
+  label.textContent = typeLabels[data.type] || data.type;
+
+  const chevron = document.createElement("span");
+  chevron.className = "chevron";
+  chevron.textContent = "▼";
+
+  const dropdown = document.createElement("div");
+  dropdown.className = "dropdown";
+
+  typeContainer.appendChild(label);
+  typeContainer.appendChild(chevron);
+  typeContainer.appendChild(dropdown);
+
+  typeContainer.addEventListener("click",(e)=>{
+    e.stopPropagation();
+    const isOpen = dropdown.classList.contains("show");
+    document.querySelectorAll(".dropdown").forEach(d=>d.classList.remove("show"));
+    document.querySelectorAll(".pill-type").forEach(p=>p.classList.remove("open"));
+    if(!isOpen){
+      dropdown.innerHTML = "";
+      const allowed = replacementRules[data.type] || [];
+      allowed.forEach(t=>{
+        const item = document.createElement("div");
+        item.textContent = typeLabels[t];
+        item.onclick = (ev)=>{
+          ev.stopPropagation();
+          label.textContent = typeLabels[t];
+          dropdown.classList.remove("show");
+          typeContainer.classList.remove("open");
+          data.type = t;
+          console.log("Тип изменён на:", t);
+        }
+        dropdown.appendChild(item);
+      });
+      dropdown.classList.add("show");
+      typeContainer.classList.add("open");
+    }
+  });
+
+  const textSpan = document.createElement("span");
+  textSpan.className = "pill-text";
+  textSpan.textContent = data.text;
+  textSpan.ondblclick = ()=>{
+    const input = document.createElement("input");
+    input.type="text";
+    input.value=textSpan.textContent;
+    input.className="pill-text editable";
+    pill.replaceChild(input,textSpan);
+    input.focus();
+    input.onblur=()=>{
+      textSpan.textContent=input.value;
+      pill.replaceChild(textSpan,input);
+      console.log("Текст изменён на:",input.value);
+    };
+    input.onkeydown=(e)=>{if(e.key==="Enter") input.blur();}
+  }
+
+  pill.appendChild(typeContainer);
+  pill.appendChild(textSpan);
+
+  pill.addEventListener("click",()=>{
+    if(lastSelectedPill && lastSelectedPill!==pill) lastSelectedPill.classList.remove("selected");
+    pill.classList.toggle("selected");
+    lastSelectedPill = pill.classList.contains("selected") ? pill : null;
+  });
+
+  document.getElementById("pills").appendChild(pill);
+}
+
+document.getElementById('searchInput').addEventListener('keydown',(e)=>{
+  if(e.key==='Backspace' && e.target.value===''){
+    const pills = document.getElementById('pills');
+    const children = Array.from(pills.children);
+    if(!lastSelectedPill && children.length){
+      children[children.length-1].classList.add('selected');
+      lastSelectedPill = children[children.length-1];
+      e.preventDefault();
+    } else if(lastSelectedPill){
+      pills.removeChild(lastSelectedPill);
+      lastSelectedPill = null;
+      e.preventDefault();
+    }
+  }
+});
+
+document.addEventListener("click",()=>{
+  document.querySelectorAll(".dropdown").forEach(d=>d.classList.remove("show"));
+  document.querySelectorAll(".pill-type").forEach(p=>p.classList.remove("open"));
+});
+</script>
+
+</body>
+</html>
