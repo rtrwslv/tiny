@@ -258,3 +258,32 @@ renderCalendar();
 </script>
 </body>
 </html>
+
+const startDate = new Date(aFilterValue.date.getFullYear(),
+                           aFilterValue.date.getMonth(),
+                           aFilterValue.date.getDate(), 0,0,0);
+
+const endDate = new Date(aFilterValue.date.getFullYear(),
+                         aFilterValue.date.getMonth(),
+                         aFilterValue.date.getDate()+1, 0,0,0);
+
+// term: Date >= startDate
+const termStart = aTermCreator.createTerm();
+termStart.attrib = Ci.nsMsgSearchAttrib.Date;
+termStart.op = Ci.nsMsgSearchOp.IsAfterOrEqual;
+termStart.value.attrib = termStart.attrib;
+termStart.value.date = startDate;
+termStart.booleanAnd = true;
+termStart.beginsGrouping = true;
+aTerms.push(termStart);
+
+// term: Date < endDate
+const termEnd = aTermCreator.createTerm();
+termEnd.attrib = Ci.nsMsgSearchAttrib.Date;
+termEnd.op = Ci.nsMsgSearchOp.IsBefore;
+termEnd.value.attrib = termEnd.attrib;
+termEnd.value.date = endDate;
+termEnd.booleanAnd = true;
+termEnd.endsGrouping = true;
+aTerms.push(termEnd);
+
