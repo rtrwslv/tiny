@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Выпадающий календарь</title>
+<style>
+body {
+  font-family: "Segoe UI", sans-serif;
+  background-color: #f5f5f5;
+  padding: 40px;
+}
+
+.calendar-container {
+  position: relative;
+  display: inline-block;
+}
+
+.calendar-button {
+  padding: 8px 12px;
+  background-color: #fff;
+  border: 1px solid #c4c4c4;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.calendar-popup {
+  position: absolute;
+  top: 45px;
+  left: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  padding: 10px;
+  width: 280px;
+  display: none;
+  z-index: 10;
+}
+
+.calendar-popup.active {
+  display: block;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.month-select {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  position: relative;
+}
+
+.month-dropdown {
+  position: absolute;
+  top: 22px;
+  left: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+  padding: 4px;
+  display: none;
+  width: 120px;
+  z-index: 20;
+}
+
+.month-dropdown.active {
+  display: block;
+}
+
+.month-option {
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.month-option:hover {
+  background-color: #f0f0f0;
+}
+
+.calendar-header button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: #555;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  gap: 2px;
+}
+
+.calendar-day-name {
+  font-size: 12px;
+  color: #777;
+  padding: 4px 0;
+}
+
+.calendar-day {
+  padding: 6px 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background-color 0.2s, border 0.2s;
+}
+
+.calendar-day:hover {
+  background-color: #e4e4ff;
+}
+
+.calendar-day.selected {
+  border: 2px solid #000;
+  color: #000;
+}
+
+.calendar-day.inactive {
+  color: #bbb;
+}
+</style>
+</head>
+<body>
+<div class="calendar-container">
+  <button class="calendar-button">Открыть календарь</button>
+  <div class="calendar-popup" id="calendar">
+    <div class="calendar-header">
+      <div class="month-select" id="monthSelect">
+        <span class="month-year" id="monthYear"></span>
+        <span class="chevron">▼</span>
+        <div class="month-dropdown" id="monthDropdown"></div>
+      </div>
+      <div>
+        <button id="prevMonth">‹</button>
+        <button id="nextMonth">›</button>
+      </div>
+    </div>
+    <div class="calendar-grid" id="calendarDays"></div>
+  </div>
+</div>
+
+<script>
+const calendarBtn = document.querySelector('.calendar-button');
+const calendarPopup = document.getElementById('calendar');
+const daysContainer = document.getElementById('calendarDays');
+const monthYear = document.getElementById('monthYear');
+const prevMonthBtn = document.getElementById('prevMonth');
+const nextMonthBtn = document.getElementById('nextMonth');
+const monthDropdown = document.getElementById('monthDropdown');
+const monthSelect = document.getElementById('monthSelect');
+
+const monthNames = [
+  "Январь","Февраль","Март","Апрель","Май","Июнь",
+  "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"
+];
+
+let selectedDate = new Date();
+let currentDate = new Date();
+
+function renderMonthDropdown(year) {
+  monthDropdown.innerHTML = "";
+  monthNames.forEach((name, index) => {
+    const opt = document.createElement("div");
+    opt.className = "month-option";
+    opt.textContent = name;
+    opt.addEventListener("click", e => {
+      e.stopPropagation();
+      currentDate.setMonth(index);
+      renderCalendar();
+      monthDropdown.classList.remove("active");
+    });
+    monthDropdown.appendChild(opt);
+  });
+}
+
+function createDayCell(day, monthOffset = 0) {
+  const div = document.createElement("div");
+  div.className = "calendar-day" + (monthOffset !== 0 ? " inactive" : "");
+  div.textContent = day;
+
+  div.addEventListener("click", () => {
+    currentDate.setMonth(currentDate.getMonth() + monthOffset);
+    selectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    console.log(`Выбрана дата: ${selectedDate.getDate()}.${selectedDate.getMonth()+1}.${selectedDate.getFullYear()}`);
+    renderCalendar();
+    calendarPopup.classList.remove("active");
+  });
+
+  if (monthOffset === 0 &&
+      selectedDate.getDate() === day &&
+      selectedDate.getMonth() === currentDate.getMonth() &&
+      selectedDate.getFullYear() === currentDate.getFullYear()) {
+    div.classList.add("selected");
+  }
+
+  return div;
+}
+
+function renderCalendar() {
+  daysContainer.innerHTML = "";
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const firstWeekday = (firstDay.getDay() + 6) % 7; 
+  const daysInMonth = lastDay.getDate();
+
+  monthYear.textContent = `${monthNames[month]} ${year}`;
+  renderMonthDropdown(year);
+
+  const prevMonthDays = new Date(year, month, 0).getDate();
+  const totalCells = firstWeekday + daysInMonth;
+  const nextMonthFill = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+
+  ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].forEach(name => {
+    const div = document.createElement("div");
+    div.className = "calendar-day-name";
+    div.textContent = name;
+    daysContainer.appendChild(div);
+  });
+
+  for(let i=firstWeekday-1; i>=0; i--) daysContainer.appendChild(createDayCell(prevMonthDays-i, -1));
+  for(let d=1; d<=daysInMonth; d++) daysContainer.appendChild(createDayCell(d));
+  for(let i=1; i<=nextMonthFill; i++) daysContainer.appendChild(createDayCell(i, 1));
+}
+
+[prevMonthBtn, nextMonthBtn].forEach((btn, idx) => {
+  btn.addEventListener("click", e => {
+    e.stopPropagation();
+    currentDate.setMonth(currentDate.getMonth() + (idx === 0 ? -1 : 1));
+    renderCalendar();
+  });
+});
+
+calendarBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  calendarPopup.classList.toggle("active");
+  renderCalendar();
+});
+
+monthSelect.addEventListener("click", e => {
+  e.stopPropagation();
+  monthDropdown.classList.toggle("active");
+});
+
+document.addEventListener("click", () => {
+  calendarPopup.classList.remove("active");
+  monthDropdown.classList.remove("active");
+});
+
+renderCalendar();
+</script>
+</body>
+</html>
