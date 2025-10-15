@@ -259,35 +259,30 @@ renderCalendar();
 </body>
 </html>
 
-const startDate = new Date(aFilterValue.date.getFullYear(),
-                           aFilterValue.date.getMonth(),
-                           aFilterValue.date.getDate(), 0, 0, 0);
-
-const endDate = new Date(aFilterValue.date.getFullYear(),
-                         aFilterValue.date.getMonth(),
-                         aFilterValue.date.getDate() + 1, 0, 0, 0);
-
-// Преобразуем в timestamp в секундах
 const startSec = Math.floor(startDate.getTime() / 1000);
 const endSec = Math.floor(endDate.getTime() / 1000);
 
-// term: Date >= startDate
 const termStart = aTermCreator.createTerm();
 termStart.attrib = Ci.nsMsgSearchAttrib.Date;
 termStart.op = Ci.nsMsgSearchOp.IsAfterOrEqual;
-termStart.value.attrib = termStart.attrib;
-termStart.value.date = startSec; // ← timestamp в секундах
+
+// Создаём объект value через createTermValue()
+termStart.value = aTermCreator.createTermValue();
+termStart.value.date = startSec;
+
 termStart.booleanAnd = true;
 termStart.beginsGrouping = true;
 aTerms.push(termStart);
 
-// term: Date < endDate
 const termEnd = aTermCreator.createTerm();
 termEnd.attrib = Ci.nsMsgSearchAttrib.Date;
 termEnd.op = Ci.nsMsgSearchOp.IsBefore;
-termEnd.value.attrib = termEnd.attrib;
-termEnd.value.date = endSec; // ← timestamp в секундах
+
+termEnd.value = aTermCreator.createTermValue();
+termEnd.value.date = endSec;
+
 termEnd.booleanAnd = true;
 termEnd.endsGrouping = true;
 aTerms.push(termEnd);
+
 
