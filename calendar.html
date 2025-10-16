@@ -259,41 +259,47 @@ renderCalendar();
 </body>
 </html>
 
-const targetDate = aFilterValue.date;
-  if (!(targetDate instanceof Date)) {
-    console.warn("QuickFilterManager: invalid date value", aFilterValue);
-    break;
-  }
+appendTerms(aTerms, aTermCreator, aFilterValue) {
+    if (!(aFilterValue.date instanceof Date)) {
+      console.warn("QuickFilterManager: invalid date value", aFilterValue);
+      return;
+    }
 
-  // Сегодня и целевая дата (UTC)
-  const today = new Date();
-  const todayUTC = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  const targetUTC = Date.UTC(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    const startDate = new Date(aFilterValue.date.getFullYear(),
+                               aFilterValue.date.getMonth(),
+                               aFilterValue.date.getDate(), 0, 0, 0);
+    const endDate = new Date(aFilterValue.date.getFullYear(),
+                             aFilterValue.date.getMonth(),
+                             aFilterValue.date.getDate() + 1, 0, 0, 0);
 
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const diffDays = Math.floor((todayUTC - targetUTC) / msPerDay);
+    // Конвертируем в PRTime (микросекунды)
+    const startPRTime = startDate.getTime() * 1000;
+    const endPRTime = endDate.getTime() * 1000;
 
-  // termStart: AgeInDays >= diffDays → используем IsHigherThan(diffDays - 1)
-  const termStart = aTermCreator.createTerm();
-  termStart.attrib = Ci.nsMsgSearchAttrib.AgeInDays;
-  termStart.op = Ci.nsMsgSearchOp.IsHigherThan;
-  termStart.value = aTermCreator.createTermValue ? aTermCreator.createTermValue() : {};
-  termStart.value.attrib = termStart.attrib;
-  termStart.value.age = diffDays - 1;  // >= diffDays
-  termStart.booleanAnd = true;
-  termStart.beginsGrouping = true;
-  aTerms.push(termStart);
+    // term: Date >= startDate
+    const termStart = aTermCreator.createTerm();
+    termStart.attrib = Ci.nsMsgSearchAttrib.Date;
+    termStart.op = Ci.nsMsgSearchOp.IsAfterOrEqual;
+    termStart.value = Cc["@mozilla.org/messenger/search-value;1"]
+                        .createInstance(Ci.nsIMsgSearchValue);
+    termStart.value.attrib = termStart.attrib;
+    termStart.value.date = startPRTime;
+    termStart.booleanAnd = true;
+    termStart.beginsGrouping = true;
+    aTerms.push(termStart);
 
-  // termEnd: AgeInDays <= diffDays → используем IsLowerThan(diffDays + 1)
-  const termEnd = aTermCreator.createTerm();
-  termEnd.attrib = Ci.nsMsgSearchAttrib.AgeInDays;
-  termEnd.op = Ci.nsMsgSearchOp.IsLowerThan;
-  termEnd.value = aTermCreator.createTermValue ? aTermCreator.createTermValue() : {};
-  termEnd.value.attrib = termEnd.attrib;
-  termEnd.value.age = diffDays + 1;  // <= diffDays
-  termEnd.booleanAnd = true;
-  termEnd.endsGrouping = true;
-  aTerms.push(termEnd);
+    // term: Date < endDate
+    const termEnd = aTermCreator.createTerm();
+    termEnd.attrib = Ci.nsMsgSearchAttrib.Date;
+    termEnd.op = Ci.nsMsgSearchOp.IsBefore;
+    termEnd.value = Cc["@mozilla.org/messenger/search-value;1"]
+                      .createInstance(Ci.nsIMsgSearchValue);
+    termEnd.value.attrib = termEnd.attrib;
+    termEnd.value.date = endPRTime;
+    termEnd.booleanAnd = true;
+    termEnd.endsGrouping = true;
+    aTerms.push(termEnd);
+  },
 
 
 
