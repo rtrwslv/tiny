@@ -260,46 +260,41 @@ renderCalendar();
 </html>
 
 appendTerms(aTerms, aTermCreator, aFilterValue) {
-    if (!(aFilterValue.date instanceof Date)) {
-      console.warn("QuickFilterManager: invalid date value", aFilterValue);
-      return;
-    }
+  let filterDate = aFilterValue.date;
+  if (!(filterDate instanceof Date)) {
+    filterDate = new Date(filterDate);
+  }
+  if (isNaN(filterDate.getTime())) {
+    console.warn("QuickFilterManager: invalid date value", aFilterValue);
+    return;
+  }
 
-    const startDate = new Date(aFilterValue.date.getFullYear(),
-                               aFilterValue.date.getMonth(),
-                               aFilterValue.date.getDate(), 0, 0, 0);
-    const endDate = new Date(aFilterValue.date.getFullYear(),
-                             aFilterValue.date.getMonth(),
-                             aFilterValue.date.getDate() + 1, 0, 0, 0);
+  const startDate = new Date(filterDate.getFullYear(), filterDate.getMonth(), filterDate.getDate(), 0,0,0);
+  const endDate = new Date(filterDate.getFullYear(), filterDate.getMonth(), filterDate.getDate()+1, 0,0,0);
 
-    // Конвертируем в PRTime (микросекунды)
-    const startPRTime = startDate.getTime() * 1000;
-    const endPRTime = endDate.getTime() * 1000;
+  const startPRTime = startDate.getTime() * 1000;
+  const endPRTime = endDate.getTime() * 1000;
 
-    // term: Date >= startDate
-    const termStart = aTermCreator.createTerm();
-    termStart.attrib = Ci.nsMsgSearchAttrib.Date;
-    termStart.op = Ci.nsMsgSearchOp.IsAfterOrEqual;
-    termStart.value = Cc["@mozilla.org/messenger/search-value;1"]
-                        .createInstance(Ci.nsIMsgSearchValue);
-    termStart.value.attrib = termStart.attrib;
-    termStart.value.date = startPRTime;
-    termStart.booleanAnd = true;
-    termStart.beginsGrouping = true;
-    aTerms.push(termStart);
+  // termStart: Date >= startDate
+  const termStart = aTermCreator.createTerm();
+  termStart.attrib = Ci.nsMsgSearchAttrib.Date;
+  termStart.op = Ci.nsMsgSearchOp.IsAfterOrEqual;
+  // просто JS-объект
+  termStart.value = { date: startPRTime, attrib: termStart.attrib };
+  termStart.booleanAnd = true;
+  termStart.beginsGrouping = true;
+  aTerms.push(termStart);
 
-    // term: Date < endDate
-    const termEnd = aTermCreator.createTerm();
-    termEnd.attrib = Ci.nsMsgSearchAttrib.Date;
-    termEnd.op = Ci.nsMsgSearchOp.IsBefore;
-    termEnd.value = Cc["@mozilla.org/messenger/search-value;1"]
-                      .createInstance(Ci.nsIMsgSearchValue);
-    termEnd.value.attrib = termEnd.attrib;
-    termEnd.value.date = endPRTime;
-    termEnd.booleanAnd = true;
-    termEnd.endsGrouping = true;
-    aTerms.push(termEnd);
-  },
+  // termEnd: Date < endDate
+  const termEnd = aTermCreator.createTerm();
+  termEnd.attrib = Ci.nsMsgSearchAttrib.Date;
+  termEnd.op = Ci.nsMsgSearchOp.IsBefore;
+  termEnd.value = { date: endPRTime, attrib: termEnd.attrib };
+  termEnd.booleanAnd = true;
+  termEnd.endsGrouping = true;
+  aTerms.push(termEnd);
+}
+
 
 
 
