@@ -259,30 +259,40 @@ renderCalendar();
 </body>
 </html>
 
-const startSec = Math.floor(startDate.getTime() / 1000);
-const endSec = Math.floor(endDate.getTime() / 1000);
+function appendAgeInDaysTerm(aTerms, aDate) {
+  // нормализуем "сегодня" и целевой день до полуночи (UTC)
+  const today = new Date();
+  const todayUTC = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const targetUTC = Date.UTC(aDate.getFullYear(), aDate.getMonth(), aDate.getDate());
 
-const termStart = aTermCreator.createTerm();
-termStart.attrib = Ci.nsMsgSearchAttrib.Date;
-termStart.op = Ci.nsMsgSearchOp.IsAfterOrEqual;
+  // разница в днях (целое число)
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const diffDays = Math.floor((todayUTC - targetUTC) / msPerDay);
 
-// Создаём объект value через createTermValue()
-termStart.value = aTermCreator.createTermValue();
-termStart.value.date = startSec;
+  // Thunderbird считает AgeInDays = 0 → сегодня, 1 → вчера и т.д.
+  // поэтому фильтр по конкретному дню: >= diffDays и <= diffDays
+  // создаём два терма (Is = diffDays) или диапазон через >= / <=
 
-termStart.booleanAnd = true;
-termStart.beginsGrouping = true;
-aTerms.push(termStart);
+  // term: AgeInDays >= diffDays
+  const termStart = {
+    attrib: Ci.nsMsgSearchAttrib.AgeInDays,
+    op: Ci.nsMsgSearchOp.IsGreaterThanOrEqual,
+    value: { age: diffDays },
+    booleanAnd: true,
+    beginsGrouping: true,
+  };
+  aTerms.push(termStart);
 
-const termEnd = aTermCreator.createTerm();
-termEnd.attrib = Ci.nsMsgSearchAttrib.Date;
-termEnd.op = Ci.nsMsgSearchOp.IsBefore;
+  // term: AgeInDays <= diffDays
+  const termEnd = {
+    attrib: Ci.nsMsgSearchAttrib.AgeInDays,
+    op: Ci.nsMsgSearchOp.IsLessThanOrEqual,
+    value: { age: diffDays },
+    booleanAnd: true,
+    endsGrouping: true,
+  };
+  aTerms.push(termEnd);
+}
 
-termEnd.value = aTermCreator.createTermValue();
-termEnd.value.date = endSec;
-
-termEnd.booleanAnd = true;
-termEnd.endsGrouping = true;
-aTerms.push(termEnd);
 
 
