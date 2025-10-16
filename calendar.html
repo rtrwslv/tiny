@@ -259,40 +259,41 @@ renderCalendar();
 </body>
 </html>
 
-function appendAgeInDaysTerm(aTerms, aDate) {
-  // нормализуем "сегодня" и целевой день до полуночи (UTC)
+const targetDate = aFilterValue.date;
+  if (!(targetDate instanceof Date)) {
+    console.warn("QuickFilterManager: invalid date value", aFilterValue);
+    break;
+  }
+
+  // Сегодня и целевая дата (UTC)
   const today = new Date();
   const todayUTC = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  const targetUTC = Date.UTC(aDate.getFullYear(), aDate.getMonth(), aDate.getDate());
+  const targetUTC = Date.UTC(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
 
-  // разница в днях (целое число)
   const msPerDay = 24 * 60 * 60 * 1000;
   const diffDays = Math.floor((todayUTC - targetUTC) / msPerDay);
 
-  // Thunderbird считает AgeInDays = 0 → сегодня, 1 → вчера и т.д.
-  // поэтому фильтр по конкретному дню: >= diffDays и <= diffDays
-  // создаём два терма (Is = diffDays) или диапазон через >= / <=
-
-  // term: AgeInDays >= diffDays
-  const termStart = {
-    attrib: Ci.nsMsgSearchAttrib.AgeInDays,
-    op: Ci.nsMsgSearchOp.IsGreaterThanOrEqual,
-    value: { age: diffDays },
-    booleanAnd: true,
-    beginsGrouping: true,
-  };
+  // termStart: AgeInDays >= diffDays → используем IsHigherThan(diffDays - 1)
+  const termStart = aTermCreator.createTerm();
+  termStart.attrib = Ci.nsMsgSearchAttrib.AgeInDays;
+  termStart.op = Ci.nsMsgSearchOp.IsHigherThan;
+  termStart.value = aTermCreator.createTermValue ? aTermCreator.createTermValue() : {};
+  termStart.value.attrib = termStart.attrib;
+  termStart.value.age = diffDays - 1;  // >= diffDays
+  termStart.booleanAnd = true;
+  termStart.beginsGrouping = true;
   aTerms.push(termStart);
 
-  // term: AgeInDays <= diffDays
-  const termEnd = {
-    attrib: Ci.nsMsgSearchAttrib.AgeInDays,
-    op: Ci.nsMsgSearchOp.IsLessThanOrEqual,
-    value: { age: diffDays },
-    booleanAnd: true,
-    endsGrouping: true,
-  };
+  // termEnd: AgeInDays <= diffDays → используем IsLowerThan(diffDays + 1)
+  const termEnd = aTermCreator.createTerm();
+  termEnd.attrib = Ci.nsMsgSearchAttrib.AgeInDays;
+  termEnd.op = Ci.nsMsgSearchOp.IsLowerThan;
+  termEnd.value = aTermCreator.createTermValue ? aTermCreator.createTermValue() : {};
+  termEnd.value.attrib = termEnd.attrib;
+  termEnd.value.age = diffDays + 1;  // <= diffDays
+  termEnd.booleanAnd = true;
+  termEnd.endsGrouping = true;
   aTerms.push(termEnd);
-}
 
 
 
