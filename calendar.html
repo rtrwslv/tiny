@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Выпадающий календарь</title>
+<title>Диапазон дат</title>
 <style>
 body {
   font-family: "Segoe UI", sans-serif;
@@ -31,11 +31,35 @@ body {
   border-radius: 6px;
   box-shadow: 0 4px 10px rgba(0,0,0,0.15);
   padding: 10px;
-  width: 280px;
+  width: 360px;
   display: none;
   z-index: 10;
+  display: flex;
 }
-.calendar-popup.active { display: block; }
+.calendar-popup.active { display: flex; }
+
+.calendar-left {
+  width: 100px;
+  border-right: 1px solid #ddd;
+  overflow-y: auto;
+  max-height: 280px;
+  padding-right: 6px;
+}
+.month-option {
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+.month-option:hover, .month-option.active {
+  background-color: #e6e6ff;
+}
+
+.calendar-right {
+  flex: 1;
+  padding-left: 10px;
+}
+
 .calendar-header {
   display: flex;
   justify-content: space-between;
@@ -43,33 +67,34 @@ body {
   font-weight: 600;
   margin-bottom: 8px;
 }
-.month-select {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
+
+.year-select {
   position: relative;
 }
-.month-dropdown {
+.year-dropdown {
   position: absolute;
   top: 22px;
-  left: 0;
+  right: 0;
   background: #fff;
   border: 1px solid #ccc;
   border-radius: 6px;
   box-shadow: 0 3px 8px rgba(0,0,0,0.1);
   padding: 4px;
   display: none;
-  width: 120px;
+  width: 80px;
   z-index: 20;
+  max-height: 150px;
+  overflow-y: auto;
 }
-.month-dropdown.active { display: block; }
-.month-option {
+.year-dropdown.active { display: block; }
+
+.year-option {
   padding: 4px 6px;
   border-radius: 4px;
   cursor: pointer;
 }
-.month-option:hover { background-color: #f0f0f0; }
+.year-option:hover { background-color: #f0f0f0; }
+
 .calendar-header button {
   background: none;
   border: none;
@@ -99,13 +124,17 @@ body {
   border: 2px solid #000;
   color: #000;
 }
+.calendar-day.in-range {
+  background-color: #dce0ff;
+  color: #000;
+}
 .calendar-day.inactive { color: #bbb; }
 </style>
 </head>
 <body>
 
 <div class="calendar-container">
-  <button class="calendar-button">Открыть календарь</button>
+  <button class="calendar-button">Выбрать дату</button>
 </div>
 
 <script>
@@ -116,43 +145,41 @@ const calendarPopup = document.createElement('div');
 calendarPopup.className = 'calendar-popup';
 calendarPopup.id = 'calendar';
 
+const leftPanel = document.createElement('div');
+leftPanel.className = 'calendar-left';
+
+const rightPanel = document.createElement('div');
+rightPanel.className = 'calendar-right';
+
 const header = document.createElement('div');
 header.className = 'calendar-header';
 
-const monthSelect = document.createElement('div');
-monthSelect.className = 'month-select';
-monthSelect.id = 'monthSelect';
-
 const monthYear = document.createElement('span');
-monthYear.className = 'month-year';
 monthYear.id = 'monthYear';
 
-const chevron = document.createElement('span');
-chevron.className = 'chevron';
-chevron.textContent = '▼';
-
-const monthDropdown = document.createElement('div');
-monthDropdown.className = 'month-dropdown';
-monthDropdown.id = 'monthDropdown';
-
-monthSelect.append(monthYear, chevron, monthDropdown);
+const yearSelect = document.createElement('div');
+yearSelect.className = 'year-select';
+const yearSpan = document.createElement('span');
+yearSpan.textContent = '▼';
+const yearDropdown = document.createElement('div');
+yearDropdown.className = 'year-dropdown';
+yearSelect.append(yearSpan, yearDropdown);
 
 const navContainer = document.createElement('div');
 const prevBtn = document.createElement('button');
-prevBtn.id = 'prevMonth';
 prevBtn.textContent = '‹';
 const nextBtn = document.createElement('button');
-nextBtn.id = 'nextMonth';
 nextBtn.textContent = '›';
 navContainer.append(prevBtn, nextBtn);
 
-header.append(monthSelect, navContainer);
+header.append(monthYear, yearSelect, navContainer);
 
 const daysContainer = document.createElement('div');
 daysContainer.className = 'calendar-grid';
 daysContainer.id = 'calendarDays';
 
-calendarPopup.append(header, daysContainer);
+rightPanel.append(header, daysContainer);
+calendarPopup.append(leftPanel, rightPanel);
 container.appendChild(calendarPopup);
 
 const monthNames = [
@@ -160,23 +187,39 @@ const monthNames = [
   "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"
 ];
 
-let selectedDate = new Date();
+let selectedStart = null;
+let selectedEnd = null;
 let currentDate = new Date();
 
-function renderMonthDropdown(year) {
-  monthDropdown.innerHTML = "";
-  monthNames.forEach((name, index) => {
+function renderMonthList() {
+  leftPanel.innerHTML = "";
+  monthNames.forEach((name, i) => {
+    const div = document.createElement("div");
+    div.className = "month-option" + (i === currentDate.getMonth() ? " active" : "");
+    div.textContent = name;
+    div.addEventListener("click", () => {
+      currentDate.setMonth(i);
+      renderCalendar();
+    });
+    leftPanel.appendChild(div);
+  });
+}
+
+function renderYearDropdown() {
+  yearDropdown.innerHTML = "";
+  const currentYear = currentDate.getFullYear();
+  for (let y = currentYear - 5; y <= currentYear + 5; y++) {
     const opt = document.createElement("div");
-    opt.className = "month-option";
-    opt.textContent = name;
+    opt.className = "year-option";
+    opt.textContent = y;
     opt.addEventListener("click", e => {
       e.stopPropagation();
-      currentDate.setMonth(index);
+      currentDate.setFullYear(y);
+      yearDropdown.classList.remove("active");
       renderCalendar();
-      monthDropdown.classList.remove("active");
     });
-    monthDropdown.appendChild(opt);
-  });
+    yearDropdown.appendChild(opt);
+  }
 }
 
 function createDayCell(day, monthOffset = 0) {
@@ -184,20 +227,36 @@ function createDayCell(day, monthOffset = 0) {
   div.className = "calendar-day" + (monthOffset !== 0 ? " inactive" : "");
   div.textContent = day;
 
-  div.addEventListener("click", () => {
-    currentDate.setMonth(currentDate.getMonth() + monthOffset);
-    selectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-    console.log(`Выбрана дата: ${selectedDate.getDate()}.${selectedDate.getMonth()+1}.${selectedDate.getFullYear()}`);
-    renderCalendar();
-    calendarPopup.classList.remove("active");
-  });
+  const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth() + monthOffset, day);
 
-  if (monthOffset === 0 &&
-      selectedDate.getDate() === day &&
-      selectedDate.getMonth() === currentDate.getMonth() &&
-      selectedDate.getFullYear() === currentDate.getFullYear()) {
+  if (selectedStart && selectedEnd && dateObj >= selectedStart && dateObj <= selectedEnd)
+    div.classList.add("in-range");
+  if (
+    (selectedStart && dateObj.toDateString() === selectedStart.toDateString()) ||
+    (selectedEnd && dateObj.toDateString() === selectedEnd.toDateString())
+  ) {
     div.classList.add("selected");
   }
+
+  div.addEventListener("click", () => {
+    if (!selectedStart || (selectedStart && selectedEnd)) {
+      selectedStart = dateObj;
+      selectedEnd = null;
+    } else if (dateObj < selectedStart) {
+      selectedEnd = selectedStart;
+      selectedStart = dateObj;
+    } else {
+      selectedEnd = dateObj;
+    }
+    renderCalendar();
+
+    if (selectedStart && !selectedEnd) {
+      console.log("Выбрана дата:", selectedStart);
+    } else if (selectedStart && selectedEnd) {
+      console.log("Выбран диапазон:", selectedStart, "-", selectedEnd);
+      calendarPopup.classList.remove("active");
+    }
+  });
 
   return div;
 }
@@ -212,11 +271,8 @@ function renderCalendar() {
   const daysInMonth = lastDay.getDate();
 
   monthYear.textContent = `${monthNames[month]} ${year}`;
-  renderMonthDropdown(year);
-
-  const prevMonthDays = new Date(year, month, 0).getDate();
-  const totalCells = firstWeekday + daysInMonth;
-  const nextMonthFill = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+  renderMonthList();
+  renderYearDropdown();
 
   ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].forEach(name => {
     const div = document.createElement("div");
@@ -224,6 +280,10 @@ function renderCalendar() {
     div.textContent = name;
     daysContainer.appendChild(div);
   });
+
+  const prevMonthDays = new Date(year, month, 0).getDate();
+  const totalCells = firstWeekday + daysInMonth;
+  const nextMonthFill = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
 
   for(let i=firstWeekday-1; i>=0; i--) daysContainer.appendChild(createDayCell(prevMonthDays-i, -1));
   for(let d=1; d<=daysInMonth; d++) daysContainer.appendChild(createDayCell(d));
@@ -244,14 +304,14 @@ calendarBtn.addEventListener("click", e => {
   renderCalendar();
 });
 
-monthSelect.addEventListener("click", e => {
+yearSelect.addEventListener("click", e => {
   e.stopPropagation();
-  monthDropdown.classList.toggle("active");
+  yearDropdown.classList.toggle("active");
 });
 
 document.addEventListener("click", () => {
   calendarPopup.classList.remove("active");
-  monthDropdown.classList.remove("active");
+  yearDropdown.classList.remove("active");
 });
 
 renderCalendar();
@@ -259,33 +319,34 @@ renderCalendar();
 </body>
 </html>
 
+
 appendTerms(aTerms, aTermCreator, aFilterValue) {
-  let filterDate = aFilterValue.date;
-  if (!(filterDate instanceof Date)) {
-    filterDate = new Date(filterDate);
-  }
-  if (isNaN(filterDate.getTime())) {
-    console.warn("QuickFilterManager: invalid date value", aFilterValue);
+  let startDate, endDate;
+
+  if (aFilterValue.startDate && aFilterValue.endDate) {
+    startDate = new Date(aFilterValue.startDate);
+    endDate = new Date(aFilterValue.endDate);
+    endDate.setDate(endDate.getDate() + 1); // включаем целый последний день
+  } else if (aFilterValue.date) {
+    startDate = new Date(aFilterValue.date);
+    endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 1);
+  } else {
+    console.warn("Invalid date filter:", aFilterValue);
     return;
   }
-
-  const startDate = new Date(filterDate.getFullYear(), filterDate.getMonth(), filterDate.getDate(), 0,0,0);
-  const endDate = new Date(filterDate.getFullYear(), filterDate.getMonth(), filterDate.getDate()+1, 0,0,0);
 
   const startPRTime = startDate.getTime() * 1000;
   const endPRTime = endDate.getTime() * 1000;
 
-  // termStart: Date >= startDate
   const termStart = aTermCreator.createTerm();
   termStart.attrib = Ci.nsMsgSearchAttrib.Date;
   termStart.op = Ci.nsMsgSearchOp.IsAfterOrEqual;
-  // просто JS-объект
   termStart.value = { date: startPRTime, attrib: termStart.attrib };
   termStart.booleanAnd = true;
   termStart.beginsGrouping = true;
   aTerms.push(termStart);
 
-  // termEnd: Date < endDate
   const termEnd = aTermCreator.createTerm();
   termEnd.attrib = Ci.nsMsgSearchAttrib.Date;
   termEnd.op = Ci.nsMsgSearchOp.IsBefore;
@@ -294,7 +355,3 @@ appendTerms(aTerms, aTermCreator, aFilterValue) {
   termEnd.endsGrouping = true;
   aTerms.push(termEnd);
 }
-
-
-
-
