@@ -1,45 +1,24 @@
-month-january = Январь
-month-february = Февраль
-month-march = Март
-month-april = Апрель
-month-may = Май
-month-june = Июнь
-month-july = Июль
-month-august = Август
-month-september = Сентябрь
-month-october = Октябрь
-month-november = Ноябрь
-month-december = Декабрь
-
-const monthKeys = [
-    "month-january",
-    "month-february",
-    "month-march",
-    "month-april",
-    "month-may",
-    "month-june",
-    "month-july",
-    "month-august",
-    "month-september",
-    "month-october",
-    "month-november",
-    "month-december",
-  ];
-
-weekday-monday-short = Пн
-weekday-tuesday-short = Вт
-weekday-wednesday-short = Ср
-weekday-thursday-short = Чт
-weekday-friday-short = Пт
-weekday-saturday-short = Сб
-weekday-sunday-short = Вс
-
-const dayKeys = [
-  "weekday-monday-short",
-  "weekday-tuesday-short",
-  "weekday-wednesday-short",
-  "weekday-thursday-short",
-  "weekday-friday-short",
-  "weekday-saturday-short",
-  "weekday-sunday-short",
-];
+init() {
+  const mailContext = document.getElementById("mailContext")
+  if (mailContext) {
+    mailContext.addEventListener("keydown", (event) => {
+      const key = event.code.replace(/^Key/, "").toLowerCase()
+      const activePopup = document.querySelector("menupopup[_moz-menuactive='true'][open='true']")
+      if (!activePopup) return
+      const item = activePopup.querySelector(`menuitem[accesskey="${key}"], menu[accesskey="${key}"]`)
+      if (!item) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (item.tagName === "MENU") {
+        const submenu = item.querySelector("menupopup")
+        if (submenu) submenu.openPopup(item, "after_start", 0, 0, false, false)
+        return
+      }
+      if (typeof MailContext?.onMenuItemCommand === "function") {
+        MailContext.onMenuItemCommand(item.id)
+      } else {
+        item.click()
+      }
+    }, true)
+  }
+}
