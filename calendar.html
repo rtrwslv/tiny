@@ -1,24 +1,24 @@
-init() {
-  const mailContext = document.getElementById("mailContext")
-  if (mailContext) {
-    mailContext.addEventListener("keydown", (event) => {
-      const key = event.code.replace(/^Key/, "").toLowerCase()
-      const activePopup = document.querySelector("menupopup[_moz-menuactive='true'][open='true']")
-      if (!activePopup) return
-      const item = activePopup.querySelector(`menuitem[accesskey="${key}"], menu[accesskey="${key}"]`)
-      if (!item) return
-      event.preventDefault()
-      event.stopImmediatePropagation()
-      if (item.tagName === "MENU") {
-        const submenu = item.querySelector("menupopup")
-        if (submenu) submenu.openPopup(item, "after_start", 0, 0, false, false)
-        return
-      }
-      if (typeof MailContext?.onMenuItemCommand === "function") {
-        MailContext.onMenuItemCommand(item.id)
-      } else {
-        item.click()
-      }
-    }, true)
-  }
+const menu = document.getElementById("mailContext");
+if (menu) {
+  menu.addEventListener("popupshown", () => {
+    const keyHandler = (e) => {
+      if (e.ctrlKey || e.altKey || e.metaKey || !e.key || e.key.length !== 1) return;
+      if (e.key < "А" || e.key > "я") return;
+
+      const enKey = e.code.replace("Key", "");
+      e.target.dispatchEvent(new KeyboardEvent("keydown", {
+        key: enKey.toLowerCase(),
+        code: e.code,
+        keyCode: enKey.charCodeAt(0),
+        bubbles: true,
+        cancelable: true
+      }));
+
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    window.addEventListener("keydown", keyHandler);
+    menu.addEventListener("popuphidden", () => window.removeEventListener("keydown", keyHandler), { once: true });
+  });
 }
