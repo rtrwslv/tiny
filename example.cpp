@@ -1,42 +1,15 @@
-bool nsMsgContentPolicy::IsExposedProtocol(nsIURI* aContentLocation) {
-  nsAutoCString contentScheme;
-  nsresult rv = aContentLocation->GetScheme(contentScheme);
-  NS_ENSURE_SUCCESS(rv, false);
 
-  // Explicitly allow all cid: URIs, including non-standard ones like cid:~WRD0000.jpg
-  if (contentScheme.LowerCaseEqualsLiteral("cid")) {
-    return true;
-  }
+if (msgWindow) {
+    nsCOMPtr<nsIMsgDBView> prevView;
+    msgWindow->GetOpenFolderView(getter_AddRefs(prevView));
+    if (prevView) {
+        int16_t oldSortType = 0;
+        int16_t oldSortOrder = 0;
 
-  if (contentScheme.LowerCaseEqualsLiteral("mailto")) return true;
+        prevView->GetSortType(&oldSortType);
+        prevView->GetSortOrder(&oldSortOrder);
 
-  if (contentScheme.LowerCaseEqualsLiteral("about")) {
-    nsAutoCString fullSpec;
-    rv = aContentLocation->GetSpec(fullSpec);
-    NS_ENSURE_SUCCESS(rv, false);
-    if (fullSpec.EqualsLiteral("about:blank")) {
-      return false;
+        m_sortType = oldSortType;
+        m_sortOrder = oldSortOrder;
     }
-    return true;
-  }
-
-  if (mCustomExposedProtocols.Contains(contentScheme)) return true;
-
-  bool isChrome;
-  rv = aContentLocation->SchemeIs("chrome", &isChrome);
-  NS_ENSURE_SUCCESS(rv, false);
-
-  bool isRes;
-  rv = aContentLocation->SchemeIs("resource", &isRes);
-  NS_ENSURE_SUCCESS(rv, false);
-
-  bool isData;
-  rv = aContentLocation->SchemeIs("data", &isData);
-  NS_ENSURE_SUCCESS(rv, false);
-
-  bool isMozExtension;
-  rv = aContentLocation->SchemeIs("moz-extension", &isMozExtension);
-  NS_ENSURE_SUCCESS(rv, false);
-
-  return isChrome || isRes || isData || isMozExtension;
 }
