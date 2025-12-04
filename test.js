@@ -1,35 +1,42 @@
-(function() {
-  // Ищем DOM списка писем
-  const msgList = document.getElementById("threadTree");
-  if (!msgList) {
-    console.warn("QuickFilter: threadTree not found");
-    return;
-  }
+const msgList = document.getElementById("threadTree");
+if (!msgList) {
+  console.warn("QuickFilter: threadTree not found");
+} else {
+  function applyAttachmentFilterFromTerm() {
+    const view = gFolderDisplay.view;
+    if (!view) return;
 
-  // Функция применения фильтра
-  function applyQuickFilter() {
-    if (!window.quickFilterBar) return;
-    try {
-      window.quickFilterBar.applyFilter(true);
-      // console.log("QuickFilter applied automatically");
-    } catch (e) {
-      console.error("QuickFilter auto-apply failed", e);
+    const filterValue = window.quickFilterBar?.getFilterValue
+      ? window.quickFilterBar.getFilterValue("attachmentFilter")?.text
+      : "";
+
+    if (!filterValue) {
+      view.showOnlyMessages(null);
+      return;
     }
+
+    const matchedKeys = [];
+    const enumerator = view.dbView.enumerateMessages();
+    while (enumerator.hasMoreElements()) {
+      const hdr = enumerator.getNext().QueryInterface(Ci.nsIMsgDBHdr);
+      const attachments = hdr.getAttachments ? hdr.getAttachments() : [];
+      if (attachments.some(att => att.name?.toLowerCase().includes(filterValue.toLowerCase()))) {
+        matchedKeys.push(hdr.messageKey);
+      }
+    }
+
+    view.showOnlyMessages(matchedKeys);
   }
 
-  // Настраиваем MutationObserver для списка писем
-  const observer = new MutationObserver(mutations => {
-    // Любое изменение childList → запускаем фильтр
-    applyQuickFilter();
+  const observer = new MutationObserver(() => {
+    if (window.quickFilterBar?.updateSearch) window.quickFilterBar.updateSearch();
+    applyAttachmentFilterFromTerm();
   });
 
-  observer.observe(msgList, {
-    childList: true, // отслеживаем добавление/удаление сообщений
-    subtree: true    // отслеживаем любые изменения внутри
-  });
+  observer.observe(msgList, { childList: true, subtree: true });
 
-  console.log("QuickFilter: MutationObserver attached to threadTree");
-
-  // Первый запуск при инициализации
-  setTimeout(applyQuickFilter, 100);
-})();
+  setTimeout(() => {
+    if (window.quickFilterBar?.updateSearch) window.quickFilterBar.updateSearch();
+    applyAttachmentFilterFromTerm();
+  }, 100);
+}
