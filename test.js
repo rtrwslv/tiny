@@ -1,47 +1,38 @@
-async function getAttachmentsFromDBViewIndex(index) {
-  const hdr = gDBView.getMsgHdrAt(index);
-  if (!hdr) return [];
-  const msgUri = hdr.folder.getUriForMsg(hdr);
-  if (typeof MsgHdrToMimeMessage === "function") {
-    return new Promise(resolve => {
-      MsgHdrToMimeMessage(hdr, mimeMsg => {
-        const out = [];
-        (function walk(node) {
-          if (!node) return;
-          if (node.isAttachment || node.filename) {
-            out.push({
-              name: node.filename || node.displayName || node.name || "",
-              contentType: node.contentType || node.type || "",
-              part: node.part || "",
-              url: node.url || ""
-            });
-          }
-          if (node.parts && node.parts.length) for (const p of node.parts) walk(p);
-        })(mimeMsg);
-        resolve(out);
-      });
-    });
+/**
+ * Получить вложения письма по индексу в gDbView
+ * @param {nsIMsgDBView} gDbView - текущий view
+ * @param {number} index - индекс письма в gDbView
+ * @returns {Array} массив объектов {name, size, url, contentType}
+ */
+function getAttachmentsByIndex(gDbView, index) {
+  if (!gDbView || typeof index !== "number") {
+    return [];
   }
-  return new Promise(resolve => {
-    try {
-      const messenger = Cc["@mozilla.org/messenger;1"].createInstance(Ci.nsIMessenger);
-      const list = [];
-      messenger.getAttachments(msgUri, {
-        onAttachment(contentType, url, displayName, uri, isExternal) {
-          list.push({ contentType, url, name: displayName, uri, isExternal });
-        },
-        onEndAllAttachments() {
-          resolve(list);
-        }
-      });
-    } catch (e) {
-      resolve([]);
-    }
-  });
+
+  try {
+    // Получаем заголовок письма
+    let msgHdr = gDbView.getMsgHdrAt(index);
+    if (!msgHdr) return [];
+
+    // Подготавливаем объект для MimeMessage
+    let mimeMsg = {};
+    MsgHdrToMimeMessage(msgHdr, null, false, mimeMsg);
+
+    // Возвращаем массив вложений
+    return mimeMsg.value.allAttachments.map(att => ({
+      name: att.name,
+      size: att.size,
+      url: att.url,
+      contentType: att.contentType
+    }));
+  } catch (e) {
+    console.error("Ошибка при получении вложений:", e);
+    return [];
+  }
 }
 
-(async () => {
-  const attachments = await getAttachmentsFromDBViewIndex(3);
-  console.log(attachments);
-})();
+let attachments = getAttachmentsByIndex(gDbView, 0); // вложения первого письма
+attachments.forEach(a => {
+  console.log(a.name, a.size, a.url, a.contentType);
+});
 
