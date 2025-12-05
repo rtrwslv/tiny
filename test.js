@@ -1,42 +1,24 @@
-const msgList = document.getElementById("threadTree");
-if (!msgList) {
-  console.warn("QuickFilter: threadTree not found");
-} else {
-  function applyAttachmentFilterFromTerm() {
-    const view = gFolderDisplay.view;
-    if (!view) return;
+function getAttachmentsFromDBViewIndex(index) {
+  const hdr = gDBView.getMsgHdrAt(index);
+  if (!hdr) return [];
 
-    const filterValue = window.quickFilterBar?.getFilterValue
-      ? window.quickFilterBar.getFilterValue("attachmentFilter")?.text
-      : "";
+  const messenger = Cc["@mozilla.org/messenger;1"].createInstance(Ci.nsIMessenger);
+  const msgUri = hdr.folder.getUriForMsg(hdr);
 
-    if (!filterValue) {
-      view.showOnlyMessages(null);
-      return;
+  const atts = [];
+  let done = false;
+
+  messenger.getAttachments(msgUri, {
+    onAttachment(contentType, url, displayName, uri, isExternal) {
+      atts.push({ contentType, url, name: displayName, uri, isExternal });
+    },
+    onEndAllAttachments() {
+      done = true;
     }
-
-    const matchedKeys = [];
-    const enumerator = view.dbView.enumerateMessages();
-    while (enumerator.hasMoreElements()) {
-      const hdr = enumerator.getNext().QueryInterface(Ci.nsIMsgDBHdr);
-      const attachments = hdr.getAttachments ? hdr.getAttachments() : [];
-      if (attachments.some(att => att.name?.toLowerCase().includes(filterValue.toLowerCase()))) {
-        matchedKeys.push(hdr.messageKey);
-      }
-    }
-
-    view.showOnlyMessages(matchedKeys);
-  }
-
-  const observer = new MutationObserver(() => {
-    if (window.quickFilterBar?.updateSearch) window.quickFilterBar.updateSearch();
-    applyAttachmentFilterFromTerm();
   });
 
-  observer.observe(msgList, { childList: true, subtree: true });
+  const thr = Cc["@mozilla.org/thread-manager;1"].getService().currentThread;
+  while (!done) thr.processNextEvent(true);
 
-  setTimeout(() => {
-    if (window.quickFilterBar?.updateSearch) window.quickFilterBar.updateSearch();
-    applyAttachmentFilterFromTerm();
-  }, 100);
+  return atts;
 }
