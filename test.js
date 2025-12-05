@@ -1,39 +1,61 @@
 /**
- * Получить вложения письма по индексу в gDbView (синхронно)
- * @param {nsIMsgDBView} gDbView 
- * @param {number} index 
- * @returns {Array} массив объектов {name, size, url, contentType}
+ * Получить вложения письма по индексу в gDbView
+ * Работает в Thunderbird 145
+ *
+ * @param {nsIMsgDBView} gDbView - текущий view
+ * @param {number} index - индекс письма в gDbView
+ * @param {function} callback - вызовется с массивом вложений
  */
-function getAttachmentsByIndexSync(gDbView, index) {
-  let result = [];
+function getAttachmentsByIndex(gDbView, index, callback) {
+  if (!gDbView || typeof index !== "number") {
+    callback([]);
+    return;
+  }
+
   try {
     let msgHdr = gDbView.getMsgHdrAt(index);
-    if (!msgHdr) return result;
-
-    let folder = msgHdr.folder;
-    let db = folder.msgDatabase;
-    if (!db) return result;
-
-    // Используем enumerator вложений
-    let enumerator = db.EnumerateAttachments(msgHdr.messageKey);
-    while (enumerator.hasMoreElements()) {
-      let attachment = enumerator.getNext().QueryInterface(Ci.nsIMsgAttachment);
-      result.push({
-        name: attachment.name,
-        size: attachment.size,
-        url: attachment.url,
-        contentType: attachment.contentType
-      });
+    if (!msgHdr) {
+      callback([]);
+      return;
     }
+
+    // MsgHdrToMimeMessage — единственный гарантированно рабочий способ получить allAttachments
+    MsgHdrToMimeMessage(msgHdr, null, false, function(mimeMsg) {
+      if (!mimeMsg) {
+        callback([]);
+        return;
+      }
+
+      let attachments = [];
+      if (mimeMsg.allAttachments && mimeMsg.allAttachments.length) {
+        for (let att of mimeMsg.allAttachments) {
+          attachments.push({
+            name: att.name,
+            size: att.size,
+            url: att.url,
+            contentType: att.contentType
+          });
+        }
+      }
+
+      callback(attachments);
+    });
+
   } catch (e) {
     console.error("Ошибка при получении вложений:", e);
+    callback([]);
   }
-  return result;
 }
 
-// --- Пример использования ---
-let attachments = getAttachmentsByIndexSync(gDbView, 0);
-console.log("Вложения первого письма:", attachments);
-attachments.forEach(a => {
-  console.log(`Имя: ${a.name}, Размер: ${a.size}, URL: ${a.url}, Тип: ${a.contentType}`);
+getAttachmentsByIndex(gDbView, 0, attachments => {
+  console.log("Вложения первого письма:", attachments);
+
+  attachments.forEach(a => {
+    console.log(`Имя: ${a.name}`);
+    console.log(`Размер: ${a.size}`);
+    console.log(`URL: ${a.url}`);
+    console.log(`MIME-тип: ${a.contentType}`);
+    console.log("---");
+  });
 });
+
