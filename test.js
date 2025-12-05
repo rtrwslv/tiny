@@ -1,41 +1,51 @@
-/**
- * Получить вложения письма по индексу в gDbView (синхронно)
- * @param {nsIMsgDBView} gDbView 
- * @param {number} index 
- * @returns {Array} массив объектов {name, size, url, contentType}
- */
-function getAttachmentsByIndexSync(gDbView, index) {
-  let result = [];
+const { MailServices } = ChromeUtils.import("resource:///modules/MailServices.jsm");
+
+function getAttachmentsByIndexAsync(gDbView, index, callback) {
   try {
     let msgHdr = gDbView.getMsgHdrAt(index);
-    if (!msgHdr) return result;
-
-    let folder = msgHdr.folder;
-    let db = folder.msgDatabase;
-    if (!db) return result;
-
-    // Получаем список вложений через db
-    let attachmentArray = [];
-    msgHdr.getStringProperty("attachmentNames"); // проверка, есть ли вложения
-
-    let enumerator = db.EnumerateAttachments(msgHdr.messageKey);
-    while (enumerator.hasMoreElements()) {
-      let attachment = enumerator.getNext().QueryInterface(Ci.nsIMsgAttachment);
-      result.push({
-        name: attachment.name,
-        size: attachment.size,
-        url: attachment.url,
-        contentType: attachment.contentType
-      });
+    if (!msgHdr) {
+      callback([]);
+      return;
     }
+
+    let msgUri = msgHdr.folder.getUriForMsg(msgHdr);
+    let msgService = MailServices.messageServiceFromURI(msgUri);
+
+    let listener = {
+      msgHdr,
+      attachments: [],
+      onStartRequest() {},
+      onStopRequest(request, context, statusCode) {},
+      onDataAvailable() {},
+      onMsgParsed(mimeMsg) {
+        // Когда MIME разобран, забираем вложения
+        let result = [];
+        if (mimeMsg.allAttachments) {
+          for (let att of mimeMsg.allAttachments) {
+            result.push({
+              name: att.name,
+              size: att.size,
+              url: att.url,
+              contentType: att.contentType
+            });
+          }
+        }
+        callback(result);
+      }
+    };
+
+    // streamMessage использует nsIStreamListener
+    msgService.streamMessage(
+      msgUri,
+      listener,
+      null,
+      null,
+      false,
+      ""
+    );
+
   } catch (e) {
-    console.error("Ошибка при получении вложений:", e);
+    console.error("Ошибка получения вложений:", e);
+    callback([]);
   }
-  return result;
 }
-
-let attachments = getAttachmentsByIndexSync(gDbView, 0);
-attachments.forEach(a => {
-  console.log(a.name, a.size, a.url, a.contentType);
-});
-
