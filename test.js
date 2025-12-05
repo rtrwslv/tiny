@@ -1,55 +1,41 @@
 /**
- * Получить вложения письма по индексу в gDbView (асинхронно)
+ * Получить вложения письма по индексу в gDbView (синхронно)
  * @param {nsIMsgDBView} gDbView 
  * @param {number} index 
- * @param {function} callback - вызывается с массивом вложений
+ * @returns {Array} массив объектов {name, size, url, contentType}
  */
-function getAttachmentsByIndexAsync(gDbView, index, callback) {
+function getAttachmentsByIndexSync(gDbView, index) {
+  let result = [];
   try {
     let msgHdr = gDbView.getMsgHdrAt(index);
-    if (!msgHdr) {
-      callback([]);
-      return;
+    if (!msgHdr) return result;
+
+    let folder = msgHdr.folder;
+    let db = folder.msgDatabase;
+    if (!db) return result;
+
+    // Получаем список вложений через db
+    let attachmentArray = [];
+    msgHdr.getStringProperty("attachmentNames"); // проверка, есть ли вложения
+
+    let enumerator = db.EnumerateAttachments(msgHdr.messageKey);
+    while (enumerator.hasMoreElements()) {
+      let attachment = enumerator.getNext().QueryInterface(Ci.nsIMsgAttachment);
+      result.push({
+        name: attachment.name,
+        size: attachment.size,
+        url: attachment.url,
+        contentType: attachment.contentType
+      });
     }
-
-    let messenger = Cc["@mozilla.org/messenger;1"].createInstance(Ci.nsIMessenger);
-    let msgUri = msgHdr.folder.getUriForMsg(msgHdr);
-
-    messenger.messageServiceFromURI(msgUri)
-      .streamMessage(
-        msgUri,
-        {
-          onStartRequest() {},
-          onStopRequest(request, context, statusCode) {},
-          onDataAvailable() {},
-          msgHdr: msgHdr,
-          attachments: [],
-          onMsgParsed(mimeMsg) {
-            // Когда MIME разобран, забираем вложения
-            let result = [];
-            if (mimeMsg.allAttachments) {
-              for (let att of mimeMsg.allAttachments) {
-                result.push({
-                  name: att.name,
-                  size: att.size,
-                  url: att.url,
-                  contentType: att.contentType
-                });
-              }
-            }
-            callback(result);
-          }
-        },
-        null,
-        false,
-        null
-      );
   } catch (e) {
-    console.error("Ошибка получения вложений:", e);
-    callback([]);
+    console.error("Ошибка при получении вложений:", e);
   }
+  return result;
 }
 
-getAttachmentsByIndexAsync(gDbView, 0, attachments => {
-  console.log("Вложения первого письма:", attachments);
+let attachments = getAttachmentsByIndexSync(gDbView, 0);
+attachments.forEach(a => {
+  console.log(a.name, a.size, a.url, a.contentType);
 });
+
