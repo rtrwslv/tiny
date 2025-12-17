@@ -80,28 +80,28 @@ collection.addListener({
   }
 });
 
-function getAllFolders(server) {
+function getAllFolders(folder) {
   let result = [];
+  
+  function walk(f) {
+    result.push(f);
 
-  function walk(folder) {
-    result.push(folder);
-
-    // subFolders — nsISimpleEnumerator
-    let subFolders = folder.subFolders;
-    while (subFolders.hasMoreElements()) {
-      let sub = subFolders.getNext().QueryInterface(Ci.nsIMsgFolder);
-      walk(sub);
+    if (f.subFolders && f.subFolders.length > 0) {
+      for (let sub of f.subFolders) {
+        walk(sub);
+      }
     }
   }
 
-  walk(server.rootFolder); // старт с rootFolder
+  walk(folder);
   return result;
 }
 
 // Использование
 let currentFolder = gFolderDisplay.selectedFolder;
 let server = currentFolder.server;
-let folders = getAllFolders(server);
+let folders = getAllFolders(server.rootFolder);
 
 console.log("Всего папок в аккаунте:", folders.length);
+
 
