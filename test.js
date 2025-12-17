@@ -1,10 +1,10 @@
 const { Gloda } = ChromeUtils.import("resource:///modules/gloda/gloda.js");
 
-// Получаем текущую папку
+// 1. Получаем текущую папку и сервер
 let currentFolder = gFolderDisplay.selectedFolder;
 let server = currentFolder.server;
 
-// Рекурсивный обход всех папок
+// 2. Рекурсивный обход всех папок аккаунта
 function getAllFolders(folder) {
   let result = [];
   function walk(f) {
@@ -19,7 +19,7 @@ function getAllFolders(folder) {
 
 let folders = getAllFolders(server.rootFolder);
 
-// Создаём GlodaQuery
+// 3. Создаём GlodaQuery
 let query = Gloda.newQuery(Gloda.NOUN_MESSAGE);
 query.subjectMatches("Test");
 
@@ -28,24 +28,19 @@ for (let f of folders) {
   query.folder(f);
 }
 
-// Создаём listener
-let listener = {
-  onItemsAdded: function(items) {
-    for (let msg of items) {
-      console.log(
-        new Date(msg.date).toLocaleString(),
-        msg.from ? msg.from[0].name : "",
-        msg.subject,
-        msg.folder ? msg.folder.name : ""
-      );
-    }
-  },
-  onItemsModified: function() {},
-  onItemsRemoved: function() {},
+// 4. Запускаем поиск через коллекцию с onQueryCompleted
+let collection = query.getCollection({
   onQueryCompleted: function() {
-    console.log("Поиск завершён");
-  }
-};
+    console.log("Поиск завершён. Всего найдено:", collection.items.length);
 
-// Получаем коллекцию с listener сразу
-let collection = query.getCollection({ listener });
+    // Выводим таблицу результатов
+    let rows = collection.items.map(msg => ({
+      date: new Date(msg.date).toLocaleString(),
+      from: msg.from ? msg.from[0].name : "",
+      subject: msg.subject,
+      folder: msg.folder ? msg.folder.name : ""
+    }));
+
+    console.table(rows);
+  }
+});
