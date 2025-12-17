@@ -79,3 +79,29 @@ collection.addListener({
     console.log("Поиск завершён. Всего найдено:", collection.items.length);
   }
 });
+
+function getAllFolders(server) {
+  let result = [];
+
+  function walk(folder) {
+    result.push(folder);
+
+    // subFolders — nsISimpleEnumerator
+    let subFolders = folder.subFolders;
+    while (subFolders.hasMoreElements()) {
+      let sub = subFolders.getNext().QueryInterface(Ci.nsIMsgFolder);
+      walk(sub);
+    }
+  }
+
+  walk(server.rootFolder); // старт с rootFolder
+  return result;
+}
+
+// Использование
+let currentFolder = gFolderDisplay.selectedFolder;
+let server = currentFolder.server;
+let folders = getAllFolders(server);
+
+console.log("Всего папок в аккаунте:", folders.length);
+
