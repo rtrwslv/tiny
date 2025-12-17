@@ -1,6 +1,6 @@
 const { Gloda } = ChromeUtils.import("resource:///modules/gloda/gloda.js");
 
-// Текущая папка
+// Получаем текущую папку
 let currentFolder = gFolderDisplay.selectedFolder;
 let server = currentFolder.server;
 
@@ -24,14 +24,13 @@ let query = Gloda.newQuery(Gloda.NOUN_MESSAGE);
 query.subjectMatches("Test");
 
 // Ограничиваем поиск папками
-for (let f of folders) query.folder(f);
+for (let f of folders) {
+  query.folder(f);
+}
 
-// Получаем коллекцию
-let collection = query.getCollection();
-
-// Регистрируем listener
-collection.addListener({
-  onItemsAdded(items) {
+// Создаём listener
+let listener = {
+  onItemsAdded: function(items) {
     for (let msg of items) {
       console.log(
         new Date(msg.date).toLocaleString(),
@@ -41,12 +40,12 @@ collection.addListener({
       );
     }
   },
-  onQueryCompleted() {
-    console.log("Поиск завершён. Всего найдено:", collection.items.length);
-  },
-  onItemsModified() {},
-  onItemsRemoved() {}
-});
+  onItemsModified: function() {},
+  onItemsRemoved: function() {},
+  onQueryCompleted: function() {
+    console.log("Поиск завершён");
+  }
+};
 
-
-
+// Получаем коллекцию с listener сразу
+let collection = query.getCollection({ listener });
