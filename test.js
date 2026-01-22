@@ -30,3 +30,12 @@ function matchesAllConditions(hdr, conditions) {
   }
   return true; // ✅ все условия выполнены
 }
+
+function getHdr(msg) {
+  try {
+    return MailServices.messageServiceFromURI(msg.uri)
+      .messageURIToMsgHdr(msg.uri);
+  } catch (e) {
+    return null;
+  }
+}
