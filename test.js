@@ -1,29 +1,16 @@
-const { Services } = ChromeUtils.import(
-  "resource://gre/modules/Services.jsm"
-);
+// Файл можно подключить, например, в chrome/content/mypanel.js
+// или прямо через bootstrap.js расширения.
 
-function logInternetState() {
-  let hasInternet =
-    Services.networkLinkService.isLinkUp &&
-    !Services.io.offline;
-
-  console.log(
-    hasInternet
-      ? "🌐 Internet: ON"
-      : "❌ Internet: OFF"
-  );
+function checkInternet() {
+  if (navigator.onLine) {
+    console.log("✅ Интернет есть");
+  } else {
+    console.log("❌ Интернета нет");
+  }
 }
 
-// первичный вывод
-logInternetState();
+// Проверяем каждые 2 секунды
+setInterval(checkInternet, 2000);
 
-// реагируем на изменения
-Services.obs.addObserver(
-  { observe: logInternetState },
-  "network:link-status-changed"
-);
-
-Services.obs.addObserver(
-  { observe: logInternetState },
-  "network:offline-status-changed"
-);
+// Для немедленной проверки сразу при запуске
+checkInternet();
