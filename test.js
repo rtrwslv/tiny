@@ -1,41 +1,63 @@
-function matchFrom(hdr, value) {
-  return hdr.author?.toLowerCase().includes(value);
-}
+const { Services } = ChromeUtils.import(
+  "resource://gre/modules/Services.jsm"
+);
 
-function matchTo(hdr, value) {
-  return hdr.recipients?.toLowerCase().includes(value);
-}
+const Ci = Components.interfaces;
 
-function matchCc(hdr, value) {
-  return hdr.ccList?.toLowerCase().includes(value);
-}
+const InternetIndicator = {
+  linkService: null,
 
-const FIELD_MATCHERS = {
-  from: matchFrom,
-  to: matchTo,
-  cc: matchCc
-};
+  init() {
+    this.linkService = Services.io
+      .QueryInterface(Ci.nsINetworkLinkService);
 
-function matchesAllConditions(hdr, conditions) {
-  for (let cond of conditions) {
-    let matcher = FIELD_MATCHERS[cond.field];
-    if (!matcher) {
-      console.warn("Неизвестное поле:", cond.field);
+    // первичное состояние
+    this.update();
+
+    // слушаем изменения
+    Services.obs.addObserver(
+      this,
+      "network:link-status-changed"
+    );
+  },
+
+  shutdown() {
+    Services.obs.removeObserver(
+      this,
+      "network:link-status-changed"
+    );
+  },
+
+  observe(subject, topic, data) {
+    if (topic === "network:link-status-changed") {
+      this.update();
+    }
+  },
+
+  hasInternet() {
+    // если физического линка нет — интернета точно нет
+    if (!this.linkService.isLinkUp) {
       return false;
     }
 
-    if (!matcher(hdr, cond.value.toLowerCase())) {
-      return false; // ❌ одно из условий не выполнено
+    // если TB переведён в offline — тоже считаем что интернета нет
+    if (Services.io.offline) {
+      return false;
+    }
+
+    return true;
+  },
+
+  update() {
+    if (this.hasInternet()) {
+      console.log("🌐 Internet: ON");
+      // тут включаешь зелёный индикатор
+    } else {
+      console.log("❌ Internet: OFF");
+      // тут включаешь красный индикатор
     }
   }
-  return true; // ✅ все условия выполнены
-}
+};
 
-function getHdr(msg) {
-  try {
-    return MailServices.messageServiceFromURI(msg.uri)
-      .messageURIToMsgHdr(msg.uri);
-  } catch (e) {
-    return null;
-  }
-}
+// запуск
+InternetIndicator.init();
