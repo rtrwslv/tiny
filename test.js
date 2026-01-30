@@ -1,28 +1,27 @@
-const { Ci } = ChromeUtils.import("chrome://global/content/xpcom.jsm");
-const { Services } = ChromeUtils.import(
-  "resource://gre/modules/Services.jsm"
-);
+const { Services } = ChromeUtils.import("resource://gre/modules/Services.jsm");
 
-let vpnLikeOffline = false;
+let mailNetworkOffline = false;
 
-const mailSession = Services.mailSession;
-
-const connectionListener = {
-  QueryInterface: ChromeUtils.generateQI([
-    Ci.nsIMsgMailSessionListener,
-  ]),
-
-  onConnectionError(server, errorCode) {
-    console.log("❌ IMAP connection error:", errorCode);
-    vpnLikeOffline = true;
-    updateConnectionIndicator();
-  },
-
-  onConnectionSuccess(server) {
-    console.log("✅ IMAP connection restored");
-    vpnLikeOffline = false;
-    updateConnectionIndicator();
+const networkObserver = {
+  observe(subject, topic, data) {
+    switch (topic) {
+      case "mail:network-error":
+        mailNetworkOffline = true;
+        break;
+      case "mail:connection-restored":
+        mailNetworkOffline = false;
+        break;
+      case "network:offline-status-changed":
+        mailNetworkOffline = data === "offline";
+        break;
+    }
   },
 };
 
-mailSession.addListener(connectionListener);
+Services.obs.addObserver(networkObserver, "mail:network-error");
+Services.obs.addObserver(networkObserver, "mail:connection-restored");
+Services.obs.addObserver(networkObserver, "network:offline-status-changed");
+
+setInterval(() => {
+  console.log(mailNetworkOffline);
+}, 2000);
