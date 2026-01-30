@@ -1,20 +1,25 @@
-function hasMailServerConnection() {
+const { MailServices } = ChromeUtils.import(
+  "resource:///modules/MailServices.jsm"
+);
+const { Ci } = ChromeUtils.import("chrome://global/content/xpcom.jsm");
+
+function hasLiveImapConnection() {
   let servers = MailServices.accounts.allServers;
 
   for (let server of servers) {
-    // интересуют только входящие (IMAP/POP)
-    if (!server || !server.type) {
+    if (server.type !== "imap") {
       continue;
     }
 
-    // IMAP — главный индикатор VPN
-    if (server.type === "imap") {
-      try {
-        // socketType !== unknown + не offline
-        if (!server.isOffline && server.socketType !== 0) {
-          return true;
-        }
-      } catch (e) {}
+    let imapServer = server.QueryInterface(Ci.nsIImapIncomingServer);
+
+    try {
+      // 🔑 ГЛАВНАЯ проверка
+      if (imapServer.isConnected) {
+        return true;
+      }
+    } catch (e) {
+      // ignore
     }
   }
 
