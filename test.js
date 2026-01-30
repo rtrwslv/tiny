@@ -1,4 +1,5 @@
 const { MailServices } = ChromeUtils.import("resource:///modules/MailServices.jsm");
+const { Ci } = ChromeUtils.import("chrome://global/content/xpcom.jsm");
 
 async function checkVpnConnection() {
   const servers = MailServices.accounts.allServers;
@@ -8,24 +9,24 @@ async function checkVpnConnection() {
 
     try {
       const imapServer = server.QueryInterface(Ci.nsIImapIncomingServer);
-      const folder = imapServer.rootFolder.QueryInterface(Ci.nsIMsgImapMailFolder);
+      const inbox = imapServer.rootFolder.getFolderWithFlags(Ci.nsMsgFolderFlags.Inbox);
 
-      // noop() возвращает true, если соединение живое
-      const connected = await new Promise(resolve => {
-        folder.noop(null, {
-          OnStopRunningUrl() { resolve(true); },
-          OnStartRunningUrl() { /* noop */ }
+      await new Promise((resolve, reject) => {
+        inbox.getNewMessages(null, {
+          OnStartRunningUrl() { },
+          OnStopRunningUrl(url) {
+            resolve(true); // операция прошла
+          }
         });
-        // Если соединение уже сломано, catch сработает ниже
       });
 
-      if (connected) return true;
+      return true; // хоть один сервер доступен → VPN есть
     } catch (e) {
-      continue;
+      continue; // ошибка на этом сервере → проверяем другие
     }
   }
 
-  return false;
+  return false; // ни один сервер не дал ответ → VPN отключен
 }
 
 // Таймер каждые 2 секунды
