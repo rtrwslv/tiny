@@ -1,6 +1,8 @@
 const { MailServices } = ChromeUtils.import("resource:///modules/MailServices.jsm");
 const { Ci } = ChromeUtils.import("chrome://global/content/xpcom.jsm");
 
+const CHECK_TIMEOUT = 3000; // таймаут 3 секунды
+
 async function checkVpnConnection() {
   const servers = MailServices.accounts.allServers;
 
@@ -11,18 +13,40 @@ async function checkVpnConnection() {
       const imapServer = server.QueryInterface(Ci.nsIImapIncomingServer);
       const inbox = imapServer.rootFolder.getFolderWithFlags(Ci.nsMsgFolderFlags.Inbox);
 
-      await new Promise((resolve, reject) => {
-        inbox.getNewMessages(null, {
-          OnStartRunningUrl() { },
-          OnStopRunningUrl(url) {
-            resolve(true); // операция прошла
+      // Пробуем получить новые письма с таймаутом
+      const connected = await new Promise((resolve) => {
+        let finished = false;
+
+        const timer = setTimeout(() => {
+          if (!finished) {
+            finished = true;
+            resolve(false); // таймаут → считаем VPN отключен
           }
-        });
+        }, CHECK_TIMEOUT);
+
+        try {
+          inbox.getNewMessages(null, {
+            OnStartRunningUrl() {},
+            OnStopRunningUrl(url) {
+              if (!finished) {
+                finished = true;
+                clearTimeout(timer);
+                resolve(true); // операция успешна
+              }
+            }
+          });
+        } catch (e) {
+          if (!finished) {
+            finished = true;
+            clearTimeout(timer);
+            resolve(false); // ошибка → VPN отключен
+          }
+        }
       });
 
-      return true; // хоть один сервер доступен → VPN есть
+      if (connected) return true; // хотя бы один сервер доступен → VPN есть
     } catch (e) {
-      continue; // ошибка на этом сервере → проверяем другие
+      continue; // ошибка на этом сервере → проверяем следующий
     }
   }
 
