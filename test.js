@@ -1,27 +1,35 @@
-const { Services } = ChromeUtils.import("resource://gre/modules/Services.jsm");
+const { MailServices } = ChromeUtils.import("resource:///modules/MailServices.jsm");
 
-let mailNetworkOffline = false;
+async function checkVpnConnection() {
+  const servers = MailServices.accounts.allServers;
 
-const networkObserver = {
-  observe(subject, topic, data) {
-    switch (topic) {
-      case "mail:network-error":
-        mailNetworkOffline = true;
-        break;
-      case "mail:connection-restored":
-        mailNetworkOffline = false;
-        break;
-      case "network:offline-status-changed":
-        mailNetworkOffline = data === "offline";
-        break;
+  for (let server of servers) {
+    if (!server || server.type !== "imap") continue;
+
+    try {
+      const imapServer = server.QueryInterface(Ci.nsIImapIncomingServer);
+      const folder = imapServer.rootFolder.QueryInterface(Ci.nsIMsgImapMailFolder);
+
+      // noop() возвращает true, если соединение живое
+      const connected = await new Promise(resolve => {
+        folder.noop(null, {
+          OnStopRunningUrl() { resolve(true); },
+          OnStartRunningUrl() { /* noop */ }
+        });
+        // Если соединение уже сломано, catch сработает ниже
+      });
+
+      if (connected) return true;
+    } catch (e) {
+      continue;
     }
-  },
-};
+  }
 
-Services.obs.addObserver(networkObserver, "mail:network-error");
-Services.obs.addObserver(networkObserver, "mail:connection-restored");
-Services.obs.addObserver(networkObserver, "network:offline-status-changed");
+  return false;
+}
 
-setInterval(() => {
-  console.log(mailNetworkOffline);
+// Таймер каждые 2 секунды
+setInterval(async () => {
+  const vpnAlive = await checkVpnConnection();
+  console.log(vpnAlive ? "✅ VPN подключён" : "❌ VPN отключён");
 }, 2000);
