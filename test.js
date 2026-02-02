@@ -1,60 +1,38 @@
-const { MailServices } = ChromeUtils.import("resource:///modules/MailServices.jsm");
-const { Ci } = ChromeUtils.import("chrome://global/content/xpcom.jsm");
+const indicator = document.getElementById("connectionIndicator");
 
-const CHECK_TIMEOUT = 3000; // таймаут 3 секунды
-
-async function checkVpnConnection() {
-  const servers = MailServices.accounts.allServers;
-
-  for (let server of servers) {
-    if (!server || server.type !== "imap") continue;
-
-    try {
-      const imapServer = server.QueryInterface(Ci.nsIImapIncomingServer);
-      const inbox = imapServer.rootFolder.getFolderWithFlags(Ci.nsMsgFolderFlags.Inbox);
-
-      // Пробуем получить новые письма с таймаутом
-      const connected = await new Promise((resolve) => {
-        let finished = false;
-
-        const timer = setTimeout(() => {
-          if (!finished) {
-            finished = true;
-            resolve(false); // таймаут → считаем VPN отключен
-          }
-        }, CHECK_TIMEOUT);
-
-        try {
-          inbox.getNewMessages(null, {
-            OnStartRunningUrl() {},
-            OnStopRunningUrl(url) {
-              if (!finished) {
-                finished = true;
-                clearTimeout(timer);
-                resolve(true); // операция успешна
-              }
-            }
-          });
-        } catch (e) {
-          if (!finished) {
-            finished = true;
-            clearTimeout(timer);
-            resolve(false); // ошибка → VPN отключен
-          }
-        }
-      });
-
-      if (connected) return true; // хотя бы один сервер доступен → VPN есть
-    } catch (e) {
-      continue; // ошибка на этом сервере → проверяем следующий
-    }
+function showOfflineTooltipOnce() {
+  if (!indicator.classList.contains("status-offline")) {
+    return;
   }
 
-  return false; // ни один сервер не дал ответ → VPN отключен
+  const tooltip = document.createElement("div");
+  tooltip.className = "connection-tooltip";
+  tooltip.textContent = "Пропало интернет-соединение";
+
+  indicator.appendChild(tooltip);
+
+  indicator.classList.remove("status-offline");
+  indicator.classList.add("status-offline-seen");
+
+  setTimeout(() => {
+    tooltip.remove();
+  }, 2500);
 }
 
-// Таймер каждые 2 секунды
-setInterval(async () => {
-  const vpnAlive = await checkVpnConnection();
-  console.log(vpnAlive ? "✅ VPN подключён" : "❌ VPN отключён");
-}, 2000);
+indicator.addEventListener("mouseenter", showOfflineTooltipOnce);
+
+#connectionIndicator .connection-tooltip {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--arrowpanel-background);
+  color: var(--arrowpanel-color);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: var(--shadow-30);
+  z-index: 1000;
+  pointer-events: none;
+}
