@@ -1,13 +1,15 @@
-const { MailServices } = ChromeUtils.import("resource:///modules/MailServices.jsm");
-const { Ci } = ChromeUtils.import("chrome://global/content/xpcom.jsm");
+async function isVpnConnected(timeout = 3000) {
+  const { MailServices } = ChromeUtils.import("resource:///modules/MailServices.jsm");
+  const { Ci } = ChromeUtils.import("chrome://global/content/xpcom.jsm");
 
-async function isVpnConnected(timeout = 2000) {
-  for (let server of MailServices.accounts.allServers) {
+  const servers = MailServices.accounts.allServers;
+
+  for (let server of servers) {
     if (!server || server.type !== "imap") continue;
 
     try {
       const imapServer = server.QueryInterface(Ci.nsIImapIncomingServer);
-      const rootFolder = imapServer.rootFolder;
+      const inbox = imapServer.rootFolder.getFolderWithFlags(Ci.nsMsgFolderFlags.Inbox);
 
       return await new Promise((resolve) => {
         let finished = false;
@@ -20,7 +22,8 @@ async function isVpnConnected(timeout = 2000) {
         }, timeout);
 
         try {
-          rootFolder.performExpand(null, {
+          // Фиктивный listener — UI не трогает
+          inbox.getNewMessages({
             OnStartRunningUrl() {},
             OnStopRunningUrl() {
               if (finished) return;
