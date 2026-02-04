@@ -1,28 +1,103 @@
-const indicator = document.getElementById("connectionIndicator");
+const { MailServices } = ChromeUtils.import("resource:///modules/MailServices.jsm");
+const { Services } = ChromeUtils.import("resource://gre/modules/Services.jsm");
+const { Ci } = ChromeUtils.import("chrome://global/content/xpcom.jsm");
 
-let offlineTooltip = null;
+let lastStateOnline = false;
+let lastVerifyAttempt = 0;
+let verifyInProgress = false;
 
-function onIndicatorMouseEnter() {
-  if (!indicator.classList.contains("status-offline")) {
-    return;
+const VERIFY_INTERVAL = 5000;
+const VERIFY_TIMEOUT = 3000;
+
+function hasActiveImapConnection() {
+  for (let server of MailServices.accounts.allServers) {
+    if (server && server.type === "imap" && server.isConnected) {
+      return true;
+    }
   }
-
-  offlineTooltip = document.createElement("div");
-  offlineTooltip.className = "connection-tooltip";
-  offlineTooltip.textContent = "Пропало интернет-соединение";
-
-  indicator.appendChild(offlineTooltip);
-
-  indicator.classList.remove("status-offline");
-  indicator.classList.add("status-offline-seen");
+  return false;
 }
 
-function onIndicatorMouseLeave() {
-  if (offlineTooltip) {
-    offlineTooltip.remove();
-    offlineTooltip = null;
+async function verifyLogonOnce() {
+  if (verifyInProgress) {
+    return false;
   }
+
+  verifyInProgress = true;
+
+  try {
+    for (let server of MailServices.accounts.allServers) {
+      if (!server || server.type !== "imap") {
+        continue;
+      }
+
+      try {
+        const imapServer = server.QueryInterface(Ci.nsIImapIncomingServer);
+
+        const ok = await new Promise((resolve) => {
+          let finished = false;
+
+          const timer = setTimeout(() => {
+            if (!finished) {
+              finished = true;
+              resolve(false);
+            }
+          }, VERIFY_TIMEOUT);
+
+          imapServer.verifyLogon(null, {
+            OnStartRunningUrl() {},
+            OnStopRunningUrl(url, exitCode) {
+              if (finished) {
+                return;
+              }
+              finished = true;
+              clearTimeout(timer);
+              resolve(exitCode === 0);
+            }
+          });
+        });
+
+        if (ok) {
+          return true;
+        }
+      } catch (e) {}
+    }
+  } finally {
+    verifyInProgress = false;
+  }
+
+  return false;
 }
 
-indicator.addEventListener("mouseenter", onIndicatorMouseEnter);
-indicator.addEventListener("mouseleave", onIndicatorMouseLeave);
+async function checkVpnState() {
+  if (Services.io.offline) {
+    lastStateOnline = false;
+    return false;
+  }
+
+  if (hasActiveImapConnection()) {
+    lastStateOnline = true;
+    return true;
+  }
+
+  if (lastStateOnline) {
+    lastStateOnline = false;
+    return false;
+  }
+
+  const now = Date.now();
+  if (now - lastVerifyAttempt < VERIFY_INTERVAL) {
+    return false;
+  }
+
+  lastVerifyAttempt = now;
+
+  const restored = await verifyLogonOnce();
+  lastStateOnline = restored;
+  return restored;
+}
+
+setInterval(async () => {
+  const vpnAlive = await checkVpnState();
+  console.log(vpnAlive ? "✅ VPN подключён" : "❌ VPN отключён");
+}, 2000);
