@@ -15,22 +15,19 @@ for (let server of servers) {
   const imapServer =
     server.QueryInterface(Ci.nsIImapIncomingServer);
 
-  console.log(
-    "[biff] вызываем performBiff для сервера:",
-    imapServer.hostName
-  );
+  console.log("[verifyLogon] проверяем сервер:", imapServer.hostName);
 
   const listener = {
     OnStartRunningUrl(url) {
       console.log(
-        "[biff] start:",
+        "[verifyLogon] start:",
         url?.spec ?? "<no url>"
       );
     },
 
     OnStopRunningUrl(url, aExitCode) {
       console.log(
-        "[biff] stop:",
+        "[verifyLogon] stop:",
         url?.spec ?? "<no url>",
         "exitCode:",
         aExitCode,
@@ -41,10 +38,10 @@ for (let server of servers) {
   };
 
   try {
-    imapServer.performBiff(listener);
+    imapServer.verifyLogon(listener);
   } catch (e) {
-    console.error("[biff] exception:", e);
+    console.error("[verifyLogon] exception:", e);
   }
 
-  break; // один сервер для наглядности
+  break; // проверяем один сервер для наглядности
 }
