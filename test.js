@@ -1,16 +1,70 @@
-if (folder.isServer) {
-  let name = folder.prettyName;
+const { MailServices } = ChromeUtils.import(
+  "resource:///modules/MailServices.jsm"
+);
+const { Ci } = ChromeUtils.import(
+  "chrome://global/content/xpcom.jsm"
+);
 
-  let parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    let lastName = parts[0];
-    let initials = parts
-      .slice(1)
-      .map(p => p[0].toUpperCase() + ".")
-      .join(" ");
+const CHECK_TIMEOUT = 3000;
 
-    return `${lastName} ${initials}`;
+async function checkVpnConnection() {
+  const servers = MailServices.accounts.allServers;
+
+  for (let server of servers) {
+    if (!server || server.type !== "imap") {
+      continue;
+    }
+
+    try {
+      const imapServer =
+        server.QueryInterface(Ci.nsIImapIncomingServer);
+
+      const connected = await new Promise((resolve) => {
+        let finished = false;
+
+        const timer = setTimeout(() => {
+          if (finished) return;
+          finished = true;
+          resolve(false);
+        }, CHECK_TIMEOUT);
+
+        const listener = {
+          OnStartRunningUrl() {},
+
+          OnStopRunningUrl(url, aExitCode) {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+
+            resolve(Components.isSuccessCode(aExitCode));
+          },
+        };
+
+        try {
+          imapServer.performBiff(listener);
+        } catch (e) {
+          if (!finished) {
+            finished = true;
+            clearTimeout(timer);
+            resolve(false);
+          }
+        }
+      });
+
+      if (connected) {
+        return true;
+      }
+    } catch (e) {
+      continue;
+    }
   }
 
-  return name;
+  return false;
 }
+
+setInterval(async () => {
+  const vpnAlive = await checkVpnConnection();
+  console.log(
+    vpnAlive ? "✅ VPN подключён" : "❌ VPN отключён"
+  );
+}, 2000);
