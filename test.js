@@ -5,66 +5,46 @@ const { Ci } = ChromeUtils.import(
   "chrome://global/content/xpcom.jsm"
 );
 
-const CHECK_TIMEOUT = 3000;
+const servers = MailServices.accounts.allServers;
 
-async function checkVpnConnection() {
-  const servers = MailServices.accounts.allServers;
-
-  for (let server of servers) {
-    if (!server || server.type !== "imap") {
-      continue;
-    }
-
-    try {
-      const imapServer =
-        server.QueryInterface(Ci.nsIImapIncomingServer);
-
-      const connected = await new Promise((resolve) => {
-        let finished = false;
-
-        const timer = setTimeout(() => {
-          if (finished) return;
-          finished = true;
-          resolve(false);
-        }, CHECK_TIMEOUT);
-
-        const listener = {
-          OnStartRunningUrl() {},
-
-          OnStopRunningUrl(url, aExitCode) {
-            if (finished) return;
-            finished = true;
-            clearTimeout(timer);
-
-            resolve(Components.isSuccessCode(aExitCode));
-          },
-        };
-
-        try {
-          imapServer.performBiff(listener);
-        } catch (e) {
-          if (!finished) {
-            finished = true;
-            clearTimeout(timer);
-            resolve(false);
-          }
-        }
-      });
-
-      if (connected) {
-        return true;
-      }
-    } catch (e) {
-      continue;
-    }
+for (let server of servers) {
+  if (!server || server.type !== "imap") {
+    continue;
   }
 
-  return false;
-}
+  const imapServer =
+    server.QueryInterface(Ci.nsIImapIncomingServer);
 
-setInterval(async () => {
-  const vpnAlive = await checkVpnConnection();
   console.log(
-    vpnAlive ? "✅ VPN подключён" : "❌ VPN отключён"
+    "[biff] вызываем performBiff для сервера:",
+    imapServer.hostName
   );
-}, 2000);
+
+  const listener = {
+    OnStartRunningUrl(url) {
+      console.log(
+        "[biff] start:",
+        url?.spec ?? "<no url>"
+      );
+    },
+
+    OnStopRunningUrl(url, aExitCode) {
+      console.log(
+        "[biff] stop:",
+        url?.spec ?? "<no url>",
+        "exitCode:",
+        aExitCode,
+        "success:",
+        Components.isSuccessCode(aExitCode)
+      );
+    },
+  };
+
+  try {
+    imapServer.performBiff(listener);
+  } catch (e) {
+    console.error("[biff] exception:", e);
+  }
+
+  break; // один сервер для наглядности
+}
