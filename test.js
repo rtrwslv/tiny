@@ -5,26 +5,17 @@ const { Ci } = ChromeUtils.import(
   "chrome://global/content/xpcom.jsm"
 );
 
-const servers = MailServices.accounts.allServers;
+for (let server of MailServices.accounts.allServers) {
+  if (!server || server.type !== "imap") continue;
 
-for (let server of servers) {
-  if (!server || server.type !== "imap") {
-    continue;
-  }
+  const imapServer = server.QueryInterface(Ci.nsIImapIncomingServer);
 
-  const imapServer =
-    server.QueryInterface(Ci.nsIImapIncomingServer);
-
-  console.log("[verifyLogon] проверяем сервер:", imapServer.hostName);
+  console.log("[verifyLogon] Проверяем сервер:", imapServer.hostName);
 
   const listener = {
     OnStartRunningUrl(url) {
-      console.log(
-        "[verifyLogon] start:",
-        url?.spec ?? "<no url>"
-      );
+      console.log("[verifyLogon] start:", url?.spec ?? "<no url>");
     },
-
     OnStopRunningUrl(url, aExitCode) {
       console.log(
         "[verifyLogon] stop:",
@@ -37,11 +28,7 @@ for (let server of servers) {
     },
   };
 
-  try {
-    imapServer.verifyLogon(listener);
-  } catch (e) {
-    console.error("[verifyLogon] exception:", e);
-  }
+  imapServer.verifyLogon(listener);
 
-  break; // проверяем один сервер для наглядности
+  break; // проверяем только первый сервер
 }
