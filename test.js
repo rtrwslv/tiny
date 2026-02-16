@@ -1,19 +1,9 @@
-// Fallback: channel с правильными флагами
-try {
-  const uri = Services.io.newURI(attachment.url);
-  const systemPrincipal =
-    Services.scriptSecurityManager.getSystemPrincipal();
-
-  // newChannelFromURI принимает ровно 6 аргументов
-  const channel = Services.io.newChannelFromURI(
-    uri,                  // aURI
-    null,                 // aLoadingNode
-    systemPrincipal,      // aLoadingPrincipal  
-    null,                 // aTriggeringPrincipal
-    Ci.nsILoadInfo.SEC_ALLOW_CROSS_ORIGIN_SEC_CONTEXT_IS_NULL,
-    Ci.nsIContentPolicy.TYPE_OTHER
-  );
-
+console.log("=== attachment debug ===");
+console.log("url:", attachment.url);
+console.log("uri:", attachment.uri);
+console.log("contentType:", attachment.contentType);
+console.log("name:", attachment.name);
+console.log("=======================");
 // Fallback: channel с правильными флагами
 try {
   const uri = Services.io.newURI(attachment.url);
