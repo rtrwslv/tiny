@@ -1,3 +1,19 @@
+function onShowAttachmentItemContextMenu(event) {
+  // ... весь существующий код без изменений ...
+
+  // ── ВСТАВИТЬ ПЕРЕД ЗАКРЫВАЮЩЕЙ СКОБКОЙ ──────────────────────
+  const emlMenuItem = document.getElementById("context-saveEmlAsTemplate");
+  if (emlMenuItem) {
+    const att = attachmentList.selectedItem?.attachment;
+    const isEml =
+      att &&
+      (att.name?.toLowerCase().endsWith(".eml") ||
+        att.contentType === "message/rfc822");
+    emlMenuItem.hidden = !isEml;
+  }
+  // ────────────────────────────────────────────────────────────
+}                                      // ← закрывающая скобка функции
+
 /**
  * Handles "Save as Template" for .eml attachments.
  * Uses the same nsIMsgCopyService mechanism that Thunderbird
