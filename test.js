@@ -60,29 +60,88 @@ async function HandleEmlAttachmentSaveAsTemplate() {
  *
  * @returns {nsIMsgFolder|null}
  */
+/**
+ * Gets the Templates folder for the current message's account.
+ * Uses a fallback chain mirroring what Thunderbird does internally
+ * in nsMsgAccountManager and MsgComposeCommands.
+ *
+ * @returns {nsIMsgFolder|null}
+ */
 function getTemplatesFolderForCurrentMessage() {
   const msgHdr = gMessage;
   if (!msgHdr) {
     return null;
   }
 
-  // Используем тот же метод что и MsgComposeCommands.js
-  const identity = MailServices.accounts.getFirstIdentityForServer(
-    msgHdr.folder.server
-  );
+  const server = msgHdr.folder.server;
 
-  // Стандартный путь Thunderbird для поиска папки Templates по identity
-  if (identity) {
-    const stationeryFolder = identity.stationeryFolder;
-    if (stationeryFolder) {
-      // stationeryFolder — это URI папки Templates из настроек identity
-      return MailUtils.getOrCreateFolder(stationeryFolder);
+  // ── Шаг 1: stationeryFolder из identity ─────────────────────
+  // Работает только если пользователь явно задал папку шаблонов
+  // в настройках аккаунта (Copies & Folders)
+  try {
+    const identity =
+      MailServices.accounts.getFirstIdentityForServer(server);
+
+    if (identity?.stationeryFolder) {
+      // stationeryFolder возвращает URI строкой, например:
+      // "imap://user@host/Templates"
+      const folder = MailUtils.getOrCreateFolder(identity.stationeryFolder);
+      if (folder) {
+        return folder;
+      }
     }
+  } catch (e) {
+    // identity не найден — идём дальше
   }
 
-  // Fallback: ищем по флагу в корне аккаунта
-  const rootFolder = msgHdr.folder.server.rootFolder;
-  return rootFolder.getFolderWithFlags(Ci.nsMsgFolderFlags.Templates);
+  // ── Шаг 2: папка с флагом nsMsgFolderFlags.Templates ────────
+  // Это стандартный флаг который Thunderbird проставляет
+  // при создании аккаунта автоматически
+  try {
+    const rootFolder = server.rootFolder;
+    const templatesFolder = rootFolder.getFolderWithFlags(
+      Ci.nsMsgFolderFlags.Templates
+    );
+    if (templatesFolder) {
+      return templatesFolder;
+    }
+  } catch (e) {
+    // getFolderWithFlags бросает если папка не найдена
+  }
+
+  // ── Шаг 3: поиск по имени среди подпапок ────────────────────
+  // Fallback для нестандартных аккаунтов где флаг не проставлен
+  try {
+    const rootFolder = server.rootFolder;
+    const knownNames = ["templates", "шаблоны", "vorlagen", "modèles"];
+
+    for (const folder of rootFolder.subFolders) {
+      if (knownNames.includes(folder.name.toLowerCase())) {
+        return folder;
+      }
+    }
+  } catch (e) {
+    // subFolders недоступны (offline?) — идём дальше
+  }
+
+  // ── Шаг 4: Local Folders как последний резерв ────────────────
+  // Если аккаунт вообще не имеет папки Templates —
+  // ищем в Local Folders, они есть у всех
+  try {
+    const localServer = MailServices.accounts.localFoldersServer;
+    const localRoot = localServer.rootFolder;
+
+    const localTemplates = localRoot.getFolderWithFlags(
+      Ci.nsMsgFolderFlags.Templates
+    );
+    if (localTemplates) {
+      return localTemplates;
+    }
+  } catch (e) {
+    // Local Folders тоже не нашли
+  }
+
+  return null;
 }
 
 /**
