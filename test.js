@@ -1,55 +1,70 @@
 /**
- * Streams an .eml attachment to a temp file.
- * Uses the same approach as the existing attachment save mechanism
- * in Thunderbird — via messenger.saveAttachmentToFile().
- *
- * @param {AttachmentInfo} attachment
- * @returns {Promise<nsIFile>}
+ * Fallback: открываем вложение через channel с правильными
+ * параметрами загрузки для внутренних протоколов Thunderbird.
  */
-function streamAttachmentToTempFile(attachment) {
-  return new Promise((resolve, reject) => {
+function streamViaChannel(attachment, tmpFile, resolve, reject) {
+  try {
+    const uri = Services.io.newURI(attachment.url);
 
-    // Создаём временный файл
-    const tmpFile = Services.dirsvc
-      .get("TmpD", Ci.nsIFile)
-      .clone();
-    tmpFile.append("tb_eml_template.eml");
-    tmpFile.createUnique(Ci.nsIFile.NORMAL_FILE_TYPE, 0o600);
+    // ── Ключевое исправление: правильный principal и флаги ─────
+    // Внутренние протоколы imap://, mailbox:// требуют
+    // systemPrincipal и TYPE_OTHER без CORS-проверок
+    const systemPrincipal =
+      Services.scriptSecurityManager.getSystemPrincipal();
 
-    // ── Способ 1: через nsIMessenger.saveAttachmentToFile ──────
-    // Это именно тот метод который Thunderbird использует
-    // при "Save Attachment" — он знает как открывать
-    // внутренние URI вложений правильно
-    try {
-      const messenger = Cc["@mozilla.org/messenger;1"]
-        .getService(Ci.nsIMessenger);
+    const channel = Services.io.newChannelFromURIWithProxyFlags(
+      uri,
+      null,                 // loadingNode
+      systemPrincipal,      // loadingPrincipal
+      null,                 // triggeringPrincipal
+      Ci.nsILoadInfo.SEC_ALLOW_CROSS_ORIGIN_SEC_CONTEXT_IS_NULL,
+      Ci.nsIContentPolicy.TYPE_OTHER,
+      "",                   // cspNonce
+      false,                // aSkipCheckForCookies
+      0                     // aProxyResolveFlags
+    );
 
-      // saveAttachmentToFile принимает:
-      // nsIFile, url, messageUri, contentType, msgWindow
-      messenger.saveAttachmentToFile(
-        tmpFile,
-        attachment.url,        // строковый URL вложения
-        attachment.uri,        // URI сообщения-родителя
-        attachment.contentType,
-        {                      // nsIUrlListener для колбэков
-          QueryInterface: ChromeUtils.generateQI(["nsIUrlListener"]),
-          OnStartRunningUrl(url) {},
-          OnStopRunningUrl(url, exitCode) {
-            if (Components.isSuccessCode(exitCode)) {
-              resolve(tmpFile);
-            } else {
-              try { tmpFile.remove(false); } catch {}
-              reject(new Error(
-                `saveAttachmentToFile failed: 0x${exitCode.toString(16)}`
-              ));
-            }
-          },
+    // Открываем выходной поток для записи в файл
+    const outStream = Cc["@mozilla.org/network/file-output-stream;1"]
+      .createInstance(Ci.nsIFileOutputStream);
+    outStream.init(tmpFile, 0x02 | 0x08 | 0x20, 0o600, 0);
+
+    channel.asyncOpen({
+      QueryInterface: ChromeUtils.generateQI(["nsIStreamListener"]),
+
+      onStartRequest(request) {},
+
+      onDataAvailable(request, inputStream, offset, count) {
+        // Используем nsIInputStreamPump подход —
+        // безопаснее чем ScriptableInputStream для бинарных данных
+        const binStream = Cc["@mozilla.org/binaryinputstream;1"]
+          .createInstance(Ci.nsIBinaryInputStream);
+        binStream.setInputStream(inputStream);
+
+        const data = binStream.readBytes(count);
+        // Пишем как бинарные данные
+        const binOutStream = Cc["@mozilla.org/binaryoutputstream;1"]
+          .createInstance(Ci.nsIBinaryOutputStream);
+        binOutStream.setOutputStream(outStream);
+        binOutStream.writeBytes(data, data.length);
+      },
+
+      onStopRequest(request, statusCode) {
+        try { outStream.close(); } catch {}
+
+        if (Components.isSuccessCode(statusCode)) {
+          resolve(tmpFile);
+        } else {
+          try { tmpFile.remove(false); } catch {}
+          reject(new Error(
+            `channel.asyncOpen failed: 0x${statusCode.toString(16)}`
+          ));
         }
-      );
-    } catch (e) {
-      // saveAttachmentToFile недоступен в этой версии — пробуем способ 2
-      console.warn("streamAttachmentToTempFile: способ 1 не сработал:", e);
-      streamViaChannel(attachment, tmpFile, resolve, reject);
-    }
-  });
+      },
+    });
+
+  } catch (e) {
+    try { tmpFile.remove(false); } catch {}
+    reject(e);
+  }
 }
