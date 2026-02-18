@@ -52,3 +52,23 @@ async function replaceFromHeader(emlFile, templatesFolder) {
   converter.writeString(newContent);
   converter.close();
 }
+
+
+async function saveEmlAttachmentAsTemplate(attachment, templatesFolder) {
+  const tmpFile = await streamAttachmentToTempFile(attachment);
+
+  try {
+    // ── НОВОЕ: заменяем From: перед копированием ───────────────
+    await replaceFromHeader(tmpFile, templatesFolder);
+    // ────────────────────────────────────────────────────────────
+
+    await copyFileAsTemplate(tmpFile, templatesFolder);
+  } finally {
+    // Всегда удаляем временный файл
+    try {
+      tmpFile.remove(false);
+    } catch (e) {
+      console.warn("Failed to remove temp file:", e);
+    }
+  }
+}
