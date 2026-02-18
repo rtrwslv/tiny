@@ -1,34 +1,94 @@
-try {
-  fileOutputStream = Cc["@mozilla.org/network/file-output-stream;1"]
-    .createInstance(Ci.nsIFileOutputStream);
-  fileOutputStream.init(emlFile, 0x02 | 0x08 | 0x20, 0o600, 0);
+async function saveEmlAttachmentAsTemplate(attachment, templatesFolder) {
+  const tmpFile = await streamAttachmentToTempFile(attachment);
 
-  binaryStream = Cc["@mozilla.org/binaryoutputstream;1"]
-    .createInstance(Ci.nsIBinaryOutputStream);
-  binaryStream.setOutputStream(fileOutputStream);
-
-  const encoder = new TextEncoder();
-  const utf8Bytes = encoder.encode(newContent);
-  
-  binaryStream.writeByteArray(utf8Bytes, utf8Bytes.length);
-} finally {
-  if (binaryStream) {
-    try { binaryStream.close(); } catch {}
-  }
-  if (fileOutputStream) {
-    try { fileOutputStream.close(); } catch {}
+  try {
+    const newMsgHdr = await copyFileAsTemplate(tmpFile, templatesFolder);
+    
+    if (newMsgHdr) {
+      await replaceFromHeaderInMessage(newMsgHdr, templatesFolder);
+    }
+  } finally {
+    try {
+      tmpFile.remove(false);
+    } catch {}
   }
 }
 
-// ДИАГНОСТИКА
-console.log("=== WHAT WE WROTE ===");
-console.log("newFrom:", newFrom);
-console.log("identity.email:", identity.email);
-console.log("identity.fullName:", identity.fullName);
+function copyFileAsTemplate(emlFile, templatesFolder) {
+  return new Promise((resolve, reject) => {
+    let newMsgKey = null;
 
-// Проверяем все identity для этого сервера
-console.log("=== ALL IDENTITIES ===");
-const ids = MailServices.accounts.getIdentitiesForServer(msgHdr.folder.server);
-for (let id of ids) {
-  console.log(`ID: ${id.email}, name: ${id.fullName}`);
+    const copyListener = {
+      QueryInterface: ChromeUtils.generateQI(["nsIMsgCopyServiceListener"]),
+      OnStartCopy() {},
+      OnProgress(progress, progressMax) {},
+      
+      SetMessageKey(msgKey) {
+        newMsgKey = msgKey;
+      },
+      
+      GetMessageId() {
+        return null;
+      },
+      
+      OnStopCopy(statusCode) {
+        if (Components.isSuccessCode(statusCode)) {
+          if (newMsgKey) {
+            const newMsgHdr = templatesFolder.GetMessageHeader(newMsgKey);
+            resolve(newMsgHdr);
+          } else {
+            resolve(null);
+          }
+        } else {
+          reject(new Error(`copyFileMessage failed: 0x${statusCode.toString(16)}`));
+        }
+      },
+    };
+
+    MailServices.copy.copyFileMessage(
+      emlFile,
+      templatesFolder,
+      null,
+      false,
+      Ci.nsMsgMessageFlags.Template,
+      "",
+      copyListener,
+      null
+    );
+  });
+}
+
+async function replaceFromHeaderInMessage(msgHdr, folder) {
+  const msgHdrInner = gMessage;
+  if (!msgHdrInner) {
+    return;
+  }
+
+  let identity = MailServices.accounts.getFirstIdentityForServer(
+    msgHdrInner.folder.server
+  );
+
+  if (!identity) {
+    const defaultAccount = MailServices.accounts.defaultAccount;
+    if (defaultAccount) {
+      identity = defaultAccount.defaultIdentity;
+    }
+  }
+
+  if (!identity || !identity.email) {
+    return;
+  }
+
+  const newAuthor = identity.fullName
+    ? `${identity.fullName} <${identity.email}>`
+    : identity.email;
+
+  try {
+    msgHdr.setStringProperty("author", newAuthor);
+    msgHdr.author = newAuthor;
+    
+    folder.msgDatabase.Commit(Ci.nsMsgDBCommitType.kLargeCommit);
+  } catch (e) {
+    console.error("Failed to update author:", e);
+  }
 }
