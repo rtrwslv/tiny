@@ -1,12 +1,7 @@
-const newHeaders = headers.replace(
-  /^From:.*?(?=\r?\n[^\s]|\n[^\s]|\r?\n\r?\n|\n\n|$)/ims,
-  `From: ${newFrom}`
-);
-
-// ВРЕМЕННО: проверим что замена произошла
-console.log("=== BEFORE ===");
-console.log(headers.substring(0, 300));
-console.log("=== AFTER ===");
-console.log(newHeaders.substring(0, 300));
-console.log("=== NEW FROM ===");
-console.log(newFrom);
+// ВРЕМЕННО: ищем From: во всех заголовках
+console.log("=== FULL HEADERS ===");
+console.log(headers);
+console.log("=== FROM: position ===");
+console.log(headers.indexOf("From:"));
+console.log(headers.indexOf("from:"));
+console.log(headers.indexOf("FROM:"));
