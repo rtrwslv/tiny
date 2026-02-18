@@ -90,15 +90,9 @@ async function replaceFromHeader(emlFile) {
   const newContent = newHeaders + body;
 
   let fileOutputStream;
-  let utf8Stream;
   let binaryStream;
 
   try {
-    const utf8Converter = Cc["@mozilla.org/intl/scriptableunicodeconverter"]
-      .createInstance(Ci.nsIScriptableUnicodeConverter);
-    utf8Converter.charset = "UTF-8";
-    utf8Stream = utf8Converter.convertToInputStream(newContent);
-
     fileOutputStream = Cc["@mozilla.org/network/file-output-stream;1"]
       .createInstance(Ci.nsIFileOutputStream);
     fileOutputStream.init(emlFile, 0x02 | 0x08 | 0x20, 0o600, 0);
@@ -107,20 +101,16 @@ async function replaceFromHeader(emlFile) {
       .createInstance(Ci.nsIBinaryOutputStream);
     binaryStream.setOutputStream(fileOutputStream);
 
-    let available;
-    while ((available = utf8Stream.available()) > 0) {
-      const bytes = utf8Stream.read(available);
-      binaryStream.writeBytes(bytes, bytes.length);
-    }
+    const encoder = new TextEncoder();
+    const utf8Bytes = encoder.encode(newContent);
+    
+    binaryStream.writeByteArray(utf8Bytes, utf8Bytes.length);
   } finally {
     if (binaryStream) {
       try { binaryStream.close(); } catch {}
     }
     if (fileOutputStream) {
       try { fileOutputStream.close(); } catch {}
-    }
-    if (utf8Stream) {
-      try { utf8Stream.close(); } catch {}
     }
   }
 }
