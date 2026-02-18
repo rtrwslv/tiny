@@ -99,9 +99,17 @@ async function replaceFromHeader(emlFile) {
     const utf8Converter = Cc["@mozilla.org/intl/scriptableunicodeconverter"]
       .createInstance(Ci.nsIScriptableUnicodeConverter);
     utf8Converter.charset = "UTF-8";
-    const utf8Data = utf8Converter.convertToByteArray(newContent);
+    const utf8Stream = utf8Converter.convertToInputStream(newContent);
 
-    fileOutputStream.write(utf8Data, utf8Data.length);
+    const binaryStream = Cc["@mozilla.org/binaryoutputstream;1"]
+      .createInstance(Ci.nsIBinaryOutputStream);
+    binaryStream.setOutputStream(fileOutputStream);
+
+    let available;
+    while ((available = utf8Stream.available()) > 0) {
+      const bytes = utf8Stream.read(available);
+      binaryStream.writeBytes(bytes, bytes.length);
+    }
   } finally {
     if (fileOutputStream) {
       try { fileOutputStream.close(); } catch {}
