@@ -1,9 +1,21 @@
-async function replaceFromHeader(emlFile, templatesFolder) {
-  const identity = MailServices.accounts.getFirstIdentityForServer(
-    templatesFolder.server
+async function replaceFromHeader(emlFile) {
+  const msgHdr = gMessage;
+  if (!msgHdr) {
+    return;
+  }
+
+  let identity = MailServices.accounts.getFirstIdentityForServer(
+    msgHdr.folder.server
   );
 
   if (!identity) {
+    const defaultAccount = MailServices.accounts.defaultAccount;
+    if (defaultAccount) {
+      identity = defaultAccount.defaultIdentity;
+    }
+  }
+
+  if (!identity || !identity.email) {
     return;
   }
 
@@ -11,21 +23,33 @@ async function replaceFromHeader(emlFile, templatesFolder) {
     ? `${identity.fullName} <${identity.email}>`
     : identity.email;
 
-  const fileInputStream = Cc["@mozilla.org/network/file-input-stream;1"]
-    .createInstance(Ci.nsIFileInputStream);
-  fileInputStream.init(emlFile, 0x01, 0, 0);
-
-  const scriptableStream = Cc["@mozilla.org/scriptableinputstream;1"]
-    .createInstance(Ci.nsIScriptableInputStream);
-  scriptableStream.init(fileInputStream);
-
+  let fileInputStream;
+  let scriptableStream;
   let emlContent = "";
-  let chunk;
-  while ((chunk = scriptableStream.read(8192))) {
-    emlContent += chunk;
+
+  try {
+    fileInputStream = Cc["@mozilla.org/network/file-input-stream;1"]
+      .createInstance(Ci.nsIFileInputStream);
+    fileInputStream.init(emlFile, 0x01, 0, 0);
+
+    scriptableStream = Cc["@mozilla.org/scriptableinstream;1"]
+      .createInstance(Ci.nsIScriptableInputStream);
+    scriptableStream.init(fileInputStream);
+
+    let chunk;
+    while ((chunk = scriptableStream.read(8192))) {
+      emlContent += chunk;
+    }
+  } catch (e) {
+    return;
+  } finally {
+    if (scriptableStream) {
+      try { scriptableStream.close(); } catch {}
+    }
+    if (fileInputStream) {
+      try { fileInputStream.close(); } catch {}
+    }
   }
-  scriptableStream.close();
-  fileInputStream.close();
 
   const headerEnd = emlContent.indexOf("\r\n\r\n");
   if (headerEnd === -1) {
@@ -42,33 +66,21 @@ async function replaceFromHeader(emlFile, templatesFolder) {
 
   const newContent = newHeaders + body;
 
-  const fileOutputStream = Cc["@mozilla.org/network/file-output-stream;1"]
-    .createInstance(Ci.nsIFileOutputStream);
-  fileOutputStream.init(emlFile, 0x02 | 0x08 | 0x20, 0o600, 0);
-
-  const converter = Cc["@mozilla.org/intl/converter-output-stream;1"]
-    .createInstance(Ci.nsIConverterOutputStream);
-  converter.init(fileOutputStream, "UTF-8");
-  converter.writeString(newContent);
-  converter.close();
-}
-
-
-async function saveEmlAttachmentAsTemplate(attachment, templatesFolder) {
-  const tmpFile = await streamAttachmentToTempFile(attachment);
+  let fileOutputStream;
+  let converter;
 
   try {
-    // ── НОВОЕ: заменяем From: перед копированием ───────────────
-    await replaceFromHeader(tmpFile, templatesFolder);
-    // ────────────────────────────────────────────────────────────
+    fileOutputStream = Cc["@mozilla.org/network/file-output-stream;1"]
+      .createInstance(Ci.nsIFileOutputStream);
+    fileOutputStream.init(emlFile, 0x02 | 0x08 | 0x20, 0o600, 0);
 
-    await copyFileAsTemplate(tmpFile, templatesFolder);
+    converter = Cc["@mozilla.org/intl/converter-output-stream;1"]
+      .createInstance(Ci.nsIConverterOutputStream);
+    converter.init(fileOutputStream, "UTF-8");
+    converter.writeString(newContent);
   } finally {
-    // Всегда удаляем временный файл
-    try {
-      tmpFile.remove(false);
-    } catch (e) {
-      console.warn("Failed to remove temp file:", e);
+    if (converter) {
+      try { converter.close(); } catch {}
     }
   }
 }
