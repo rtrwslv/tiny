@@ -32,7 +32,7 @@ async function replaceFromHeader(emlFile) {
       .createInstance(Ci.nsIFileInputStream);
     fileInputStream.init(emlFile, 0x01, 0, 0);
 
-    scriptableStream = Cc["@mozilla.org/scriptableinstream;1"]
+    scriptableStream = Cc["@mozilla.org/scriptableinputstream;1"]
       .createInstance(Ci.nsIScriptableInputStream);
     scriptableStream.init(fileInputStream);
 
@@ -51,7 +51,10 @@ async function replaceFromHeader(emlFile) {
     }
   }
 
-  const headerEnd = emlContent.indexOf("\r\n\r\n");
+  let headerEnd = emlContent.indexOf("\r\n\r\n");
+  if (headerEnd === -1) {
+    headerEnd = emlContent.indexOf("\n\n");
+  }
   if (headerEnd === -1) {
     return;
   }
@@ -60,7 +63,7 @@ async function replaceFromHeader(emlFile) {
   const body = emlContent.substring(headerEnd);
 
   const newHeaders = headers.replace(
-    /^From:.*?(?=\r?\n[^\s]|\r?\n\r?\n|$)/ims,
+    /^From:.*?(?=\r?\n[^\s]|\n[^\s]|\r?\n\r?\n|\n\n|$)/ims,
     `From: ${newFrom}`
   );
 
