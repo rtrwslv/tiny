@@ -1,116 +1,34 @@
-async function replaceFromHeader(emlFile) {
-  const msgHdr = gMessage;
-  if (!msgHdr) {
-    return;
+try {
+  fileOutputStream = Cc["@mozilla.org/network/file-output-stream;1"]
+    .createInstance(Ci.nsIFileOutputStream);
+  fileOutputStream.init(emlFile, 0x02 | 0x08 | 0x20, 0o600, 0);
+
+  binaryStream = Cc["@mozilla.org/binaryoutputstream;1"]
+    .createInstance(Ci.nsIBinaryOutputStream);
+  binaryStream.setOutputStream(fileOutputStream);
+
+  const encoder = new TextEncoder();
+  const utf8Bytes = encoder.encode(newContent);
+  
+  binaryStream.writeByteArray(utf8Bytes, utf8Bytes.length);
+} finally {
+  if (binaryStream) {
+    try { binaryStream.close(); } catch {}
   }
-
-  let identity = MailServices.accounts.getFirstIdentityForServer(
-    msgHdr.folder.server
-  );
-
-  if (!identity) {
-    const defaultAccount = MailServices.accounts.defaultAccount;
-    if (defaultAccount) {
-      identity = defaultAccount.defaultIdentity;
-    }
+  if (fileOutputStream) {
+    try { fileOutputStream.close(); } catch {}
   }
+}
 
-  if (!identity || !identity.email) {
-    return;
-  }
+// ДИАГНОСТИКА
+console.log("=== WHAT WE WROTE ===");
+console.log("newFrom:", newFrom);
+console.log("identity.email:", identity.email);
+console.log("identity.fullName:", identity.fullName);
 
-  const newFrom = identity.fullName
-    ? `"${identity.fullName}" <${identity.email}>`
-    : `<${identity.email}>`;
-
-  let fileInputStream;
-  let scriptableStream;
-  let emlContent = "";
-
-  try {
-    fileInputStream = Cc["@mozilla.org/network/file-input-stream;1"]
-      .createInstance(Ci.nsIFileInputStream);
-    fileInputStream.init(emlFile, 0x01, 0, 0);
-
-    scriptableStream = Cc["@mozilla.org/scriptableinputstream;1"]
-      .createInstance(Ci.nsIScriptableInputStream);
-    scriptableStream.init(fileInputStream);
-
-    let chunk;
-    while ((chunk = scriptableStream.read(8192))) {
-      emlContent += chunk;
-    }
-  } catch (e) {
-    return;
-  } finally {
-    if (scriptableStream) {
-      try { scriptableStream.close(); } catch {}
-    }
-    if (fileInputStream) {
-      try { fileInputStream.close(); } catch {}
-    }
-  }
-
-  let headerEnd = emlContent.indexOf("\r\n\r\n");
-  if (headerEnd === -1) {
-    headerEnd = emlContent.indexOf("\n\n");
-  }
-  if (headerEnd === -1) {
-    return;
-  }
-
-  const headers = emlContent.substring(0, headerEnd);
-  const body = emlContent.substring(headerEnd);
-
-  const lines = headers.split(/\r?\n/);
-  const newLines = [];
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    if (/^(From|Sender|Reply-To|Return-Path):\s/i.test(line)) {
-      const headerName = line.match(/^([^:]+):/i)[1];
-      
-      let j = i + 1;
-      while (j < lines.length && /^\s/.test(lines[j])) {
-        j++;
-      }
-
-      newLines.push(`${headerName}: ${newFrom}`);
-      i = j;
-      continue;
-    }
-
-    newLines.push(line);
-    i++;
-  }
-
-  const newHeaders = newLines.join("\r\n");
-  const newContent = newHeaders + body;
-
-  let fileOutputStream;
-  let binaryStream;
-
-  try {
-    fileOutputStream = Cc["@mozilla.org/network/file-output-stream;1"]
-      .createInstance(Ci.nsIFileOutputStream);
-    fileOutputStream.init(emlFile, 0x02 | 0x08 | 0x20, 0o600, 0);
-
-    binaryStream = Cc["@mozilla.org/binaryoutputstream;1"]
-      .createInstance(Ci.nsIBinaryOutputStream);
-    binaryStream.setOutputStream(fileOutputStream);
-
-    const encoder = new TextEncoder();
-    const utf8Bytes = encoder.encode(newContent);
-    
-    binaryStream.writeByteArray(utf8Bytes, utf8Bytes.length);
-  } finally {
-    if (binaryStream) {
-      try { binaryStream.close(); } catch {}
-    }
-    if (fileOutputStream) {
-      try { fileOutputStream.close(); } catch {}
-    }
-  }
+// Проверяем все identity для этого сервера
+console.log("=== ALL IDENTITIES ===");
+const ids = MailServices.accounts.getIdentitiesForServer(msgHdr.folder.server);
+for (let id of ids) {
+  console.log(`ID: ${id.email}, name: ${id.fullName}`);
 }
