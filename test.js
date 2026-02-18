@@ -90,18 +90,20 @@ async function replaceFromHeader(emlFile) {
   const newContent = newHeaders + body;
 
   let fileOutputStream;
+  let utf8Stream;
+  let binaryStream;
 
   try {
+    const utf8Converter = Cc["@mozilla.org/intl/scriptableunicodeconverter"]
+      .createInstance(Ci.nsIScriptableUnicodeConverter);
+    utf8Converter.charset = "UTF-8";
+    utf8Stream = utf8Converter.convertToInputStream(newContent);
+
     fileOutputStream = Cc["@mozilla.org/network/file-output-stream;1"]
       .createInstance(Ci.nsIFileOutputStream);
     fileOutputStream.init(emlFile, 0x02 | 0x08 | 0x20, 0o600, 0);
 
-    const utf8Converter = Cc["@mozilla.org/intl/scriptableunicodeconverter"]
-      .createInstance(Ci.nsIScriptableUnicodeConverter);
-    utf8Converter.charset = "UTF-8";
-    const utf8Stream = utf8Converter.convertToInputStream(newContent);
-
-    const binaryStream = Cc["@mozilla.org/binaryoutputstream;1"]
+    binaryStream = Cc["@mozilla.org/binaryoutputstream;1"]
       .createInstance(Ci.nsIBinaryOutputStream);
     binaryStream.setOutputStream(fileOutputStream);
 
@@ -111,8 +113,14 @@ async function replaceFromHeader(emlFile) {
       binaryStream.writeBytes(bytes, bytes.length);
     }
   } finally {
+    if (binaryStream) {
+      try { binaryStream.close(); } catch {}
+    }
     if (fileOutputStream) {
       try { fileOutputStream.close(); } catch {}
+    }
+    if (utf8Stream) {
+      try { utf8Stream.close(); } catch {}
     }
   }
 }
