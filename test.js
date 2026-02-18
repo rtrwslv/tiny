@@ -19,8 +19,18 @@ async function replaceFromHeader(emlFile) {
     return;
   }
 
-  const newFrom = identity.fullName
-    ? `${identity.fullName} <${identity.email}>`
+  const encodedName = identity.fullName
+    ? MailServices.mimeConverter.encodeMimePartIIStr_UTF8(
+        identity.fullName,
+        false,
+        "UTF-8",
+        0,
+        72
+      )
+    : null;
+
+  const newFrom = encodedName
+    ? `${encodedName} <${identity.email}>`
     : identity.email;
 
   let fileInputStream;
@@ -62,54 +72,28 @@ async function replaceFromHeader(emlFile) {
   const headers = emlContent.substring(0, headerEnd);
   const body = emlContent.substring(headerEnd);
 
-  console.log("=== HEADERS LENGTH ===");
-  console.log(headers.length);
-  console.log("=== FROM: position ===");
-  console.log(headers.indexOf("From:"));
-
   const lines = headers.split(/\r?\n/);
-  console.log("=== TOTAL LINES ===");
-  console.log(lines.length);
-
   const newLines = [];
   let i = 0;
-  let foundFrom = false;
 
   while (i < lines.length) {
     const line = lines[i];
 
-    if (/^From:\s/i.test(line)) {
-      console.log("=== FOUND From: at line", i, "===");
-      console.log("Line content:", line);
+    if (/^(From|Sender|Reply-To|Return-Path):\s/i.test(line)) {
+      const headerName = line.match(/^([^:]+):/i)[1];
       
-      foundFrom = true;
-      
-      let fullHeader = line;
       let j = i + 1;
       while (j < lines.length && /^\s/.test(lines[j])) {
-        fullHeader += "\n" + lines[j];
         j++;
       }
-      
-      console.log("=== OLD From ===");
-      console.log(fullHeader);
-      console.log("=== NEW From ===");
-      console.log(`From: ${newFrom}`);
-      
-      newLines.push(`From: ${newFrom}`);
+
+      newLines.push(`${headerName}: ${newFrom}`);
       i = j;
       continue;
     }
 
     newLines.push(line);
     i++;
-  }
-
-  if (!foundFrom) {
-    console.log("=== From: NOT FOUND, checking first 10 lines ===");
-    for (let k = 0; k < Math.min(10, lines.length); k++) {
-      console.log(`Line ${k}:`, lines[k]);
-    }
   }
 
   const newHeaders = newLines.join("\r\n");
