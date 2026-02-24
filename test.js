@@ -1,128 +1,248 @@
-async function SaveAsTemplate() {
-  // ── Проверка 1: это окно с открытым .eml вложением? ─────────
-  // Когда .eml открывается двойным кликом, он открывается в специальном окне
-  // Проверяем есть ли opener (родительское окно) и attachment там
-  
-  if (window.opener && window.opener.attachmentList) {
-    const parentAttachment = window.opener.attachmentList.selectedItem?.attachment;
-    
-    if (parentAttachment && 
-        (parentAttachment.name?.toLowerCase().endsWith(".eml") ||
-         parentAttachment.contentType === "message/rfc822")) {
-      
-      // Это .eml вложение — используем нашу логику
-      await saveEmlAttachmentAsTemplateFromWindow(parentAttachment);
-      return;
-    }
-  }
-
-  // ── Проверка 2: это само окно с вложением которое мы открыли? ─
-  // Если окно открыто из вложения, может быть messageURI специфичный
-  if (window.arguments && window.arguments[0]) {
-    const messageURI = window.arguments[0];
-    
-    // Проверяем это attachment: URI
-    if (messageURI.includes("type=message/rfc822") || 
-        messageURI.includes(".eml")) {
-      
-      await saveEmlFromMessageURI(messageURI);
-      return;
-    }
-  }
-
-  // ── Стандартная логика для обычных писем ───────────────────
-  // Если ничего из выше не сработало — это обычное письмо
-  // Здесь должен быть существующий код SaveAsTemplate
-  // НЕ УДАЛЯЙ ЕГО — просто наш код идёт перед ним
-  
-  const msgHdr = gMessage || GetSelectedMessages()[0];
-  if (!msgHdr) {
+async function SaveAsTemplate(uri) {
+  // ── Проверка: это .eml вложение? ──────────────────────────
+  if (typeof gMessage !== "undefined" && gMessage && !gMessage.folder) {
+    // gMessage.folder === null означает что это вложение, а не письмо из папки
+    await saveEmlAttachmentAsTemplate();
     return;
   }
 
-  // ... остальной существующий код SaveAsTemplate ...
+  // ── Стандартная логика для обычных писем ──────────────────
+  // Существующий код SaveAsTemplate продолжается здесь без изменений
+  // ...
 }
 
-// ── Вспомогательные функции ────────────────────────────────
-
-async function saveEmlAttachmentAsTemplateFromWindow(attachment) {
-  // Получаем папку Templates из родительского окна
-  const parentWindow = window.opener;
-  const templatesFolder = parentWindow.getTemplatesFolderForCurrentMessage 
-    ? parentWindow.getTemplatesFolderForCurrentMessage()
-    : await getDefaultTemplatesFolder();
-
-  if (!templatesFolder) {
-    Services.prompt.alert(
-      window,
-      "Error",
-      "Templates folder not found. Please configure Templates folder in account settings."
-    );
-    return;
-  }
-
+async function saveEmlAttachmentAsTemplate() {
   try {
-    // Используем функции из родительского окна если доступны
-    if (parentWindow.saveEmlAttachmentAsTemplate) {
-      await parentWindow.saveEmlAttachmentAsTemplate(attachment, templatesFolder);
-    } else {
-      // Fallback — вызываем напрямую
-      const tmpFile = await streamAttachmentToTempFile(attachment);
-      try {
-        await replaceFromHeader(tmpFile);
-        await copyFileAsTemplate(tmpFile, templatesFolder);
-      } finally {
-        try { tmpFile.remove(false); } catch {}
-      }
+    // Шаг 1: Получаем URI сообщения из browser
+    const browser = document.getElementById("messagepane");
+    if (!browser || !browser.currentURI) {
+      throw new Error("Message browser not found");
     }
 
-    window.close();
-    
+    const messageURI = browser.currentURI.spec;
+
+    // Шаг 2: Сохраняем во временный файл через messenger.saveAs
+    const tmpFile = Services.dirsvc.get("TmpD", Ci.nsIFile).clone();
+    tmpFile.append("tb_eml_template.eml");
+    tmpFile.createUnique(Ci.nsIFile.NORMAL_FILE_TYPE, 0o600);
+
+    const messenger = Cc["@mozilla.org/messenger;1"]
+      .getService(Ci.nsIMessenger);
+
+    await new Promise((resolve, reject) => {
+      messenger.saveAs(
+        messageURI,
+        true,
+        null,
+        tmpFile.path,
+        {
+          QueryInterface: ChromeUtils.generateQI(["nsIUrlListener"]),
+          OnStartRunningUrl(url) {},
+          OnStopRunningUrl(url, exitCode) {
+            if (Components.isSuccessCode(exitCode)) {
+              resolve();
+            } else {
+              reject(new Error(`saveAs failed: 0x${exitCode.toString(16)}`));
+            }
+          },
+        }
+      );
+    });
+
+    // Шаг 3: Получаем Templates folder
+    const templatesFolder = getTemplatesFolder();
+    if (!templatesFolder) {
+      tmpFile.remove(false);
+      Services.prompt.alert(window, "Error", "Templates folder not found.");
+      return;
+    }
+
+    // Шаг 4: Заменяем From и Date заголовки
+    await replaceFromAndDateHeaders(tmpFile);
+
+    // Шаг 5: Копируем в Templates
+    await copyToTemplatesFolder(tmpFile, templatesFolder);
+
+    // Шаг 6: Очистка
+    try {
+      tmpFile.remove(false);
+    } catch {}
+
+    // Шаг 7: Закрываем окно и показываем уведомление
+    if (window.opener) {
+      window.close();
+    }
+
     Services.prompt.alert(
       window.opener || window,
       "Success",
-      `"${attachment.name}" saved as template.`
+      "Message saved as template."
     );
+
   } catch (e) {
-    Services.prompt.alert(
-      window,
-      "Error",
-      `Failed to save template: ${e.message}`
-    );
+    console.error("saveEmlAttachmentAsTemplate:", e);
+    Services.prompt.alert(window, "Error", `Failed to save template: ${e.message}`);
   }
 }
 
-async function saveEmlFromMessageURI(messageURI) {
-  // Этот случай сложнее — нужно извлечь .eml из URI
-  // Пока заглушка
-  Services.prompt.alert(
-    window,
-    "Not Implemented",
-    "Saving .eml from message URI not yet implemented. Please use context menu in the main window."
-  );
-}
-
-async function getDefaultTemplatesFolder() {
+function getTemplatesFolder() {
   const defaultAccount = MailServices.accounts.defaultAccount;
   if (!defaultAccount) {
     return null;
   }
 
+  const identity = defaultAccount.defaultIdentity;
+  
+  if (identity?.stationeryFolder) {
+    try {
+      return MailUtils.getOrCreateFolder(identity.stationeryFolder);
+    } catch {}
+  }
+
   try {
     const rootFolder = defaultAccount.incomingServer.rootFolder;
     return rootFolder.getFolderWithFlags(Ci.nsMsgFolderFlags.Templates);
-  } catch (e) {
-    return null;
+  } catch {}
+
+  return null;
+}
+
+async function replaceFromAndDateHeaders(emlFile) {
+  const identity = MailServices.accounts.defaultAccount?.defaultIdentity;
+  if (!identity || !identity.email) {
+    return;
+  }
+
+  const encodedName = identity.fullName
+    ? MailServices.mimeConverter.encodeMimePartIIStr_UTF8(
+        identity.fullName,
+        false,
+        "UTF-8",
+        0,
+        72
+      )
+    : null;
+
+  const newFrom = encodedName
+    ? `${encodedName} <${identity.email}>`
+    : identity.email;
+
+  const currentDate = new Date().toUTCString();
+
+  let fileInputStream;
+  let scriptableStream;
+  let emlContent = "";
+
+  try {
+    fileInputStream = Cc["@mozilla.org/network/file-input-stream;1"]
+      .createInstance(Ci.nsIFileInputStream);
+    fileInputStream.init(emlFile, 0x01, 0, 0);
+
+    scriptableStream = Cc["@mozilla.org/scriptableinputstream;1"]
+      .createInstance(Ci.nsIScriptableInputStream);
+    scriptableStream.init(fileInputStream);
+
+    let chunk;
+    while ((chunk = scriptableStream.read(8192))) {
+      emlContent += chunk;
+    }
+  } finally {
+    if (scriptableStream) {
+      try { scriptableStream.close(); } catch {}
+    }
+    if (fileInputStream) {
+      try { fileInputStream.close(); } catch {}
+    }
+  }
+
+  let headerEnd = emlContent.indexOf("\r\n\r\n");
+  if (headerEnd === -1) {
+    headerEnd = emlContent.indexOf("\n\n");
+  }
+  if (headerEnd === -1) {
+    return;
+  }
+
+  const headers = emlContent.substring(0, headerEnd);
+  const body = emlContent.substring(headerEnd);
+
+  const lines = headers.split(/\r?\n/);
+  const newLines = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (/^(From|Sender|Reply-To|Return-Path|Date):\s/i.test(line)) {
+      const headerName = line.match(/^([^:]+):/i)[1];
+      
+      let j = i + 1;
+      while (j < lines.length && /^\s/.test(lines[j])) {
+        j++;
+      }
+
+      if (headerName.toLowerCase() === "date") {
+        newLines.push(`Date: ${currentDate}`);
+      } else {
+        newLines.push(`${headerName}: ${newFrom}`);
+      }
+      
+      i = j;
+      continue;
+    }
+
+    newLines.push(line);
+    i++;
+  }
+
+  const newHeaders = newLines.join("\r\n");
+  const newContent = newHeaders + body;
+
+  let fileOutputStream;
+  let converter;
+
+  try {
+    fileOutputStream = Cc["@mozilla.org/network/file-output-stream;1"]
+      .createInstance(Ci.nsIFileOutputStream);
+    fileOutputStream.init(emlFile, 0x02 | 0x08 | 0x20, 0o600, 0);
+
+    converter = Cc["@mozilla.org/intl/converter-output-stream;1"]
+      .createInstance(Ci.nsIConverterOutputStream);
+    converter.init(fileOutputStream, "UTF-8");
+    converter.writeString(newContent);
+  } finally {
+    if (converter) {
+      try { converter.close(); } catch {}
+    }
   }
 }
 
-// ── Импорт функций из msgHdrView.js если нужно ───────────────
-// Если streamAttachmentToTempFile, replaceFromHeader, copyFileAsTemplate
-// не доступны в этом скоупе — нужно либо:
-// 1. Перенести их в общий модуль
-// 2. Или импортировать через ChromeUtils.import
-// 3. Или дублировать здесь
+function copyToTemplatesFolder(emlFile, templatesFolder) {
+  return new Promise((resolve, reject) => {
+    const copyListener = {
+      QueryInterface: ChromeUtils.generateQI(["nsIMsgCopyServiceListener"]),
+      OnStartCopy() {},
+      OnProgress(progress, progressMax) {},
+      SetMessageKey(msgKey) {},
+      GetMessageId() { return null; },
+      OnStopCopy(statusCode) {
+        if (Components.isSuccessCode(statusCode)) {
+          resolve();
+        } else {
+          reject(new Error(`copyFileMessage failed: 0x${statusCode.toString(16)}`));
+        }
+      },
+    };
 
-// Пример импорта (если функции экспортированы как модуль):
-// const { streamAttachmentToTempFile, replaceFromHeader, copyFileAsTemplate } =
-//   ChromeUtils.import("resource:///modules/AttachmentUtils.jsm");
+    MailServices.copy.copyFileMessage(
+      emlFile,
+      templatesFolder,
+      null,
+      false,
+      Ci.nsMsgMessageFlags.Template,
+      "",
+      copyListener,
+      null
+    );
+  });
+}
