@@ -13,25 +13,21 @@ async function saveEmlFromStoredAttachment() {
 
     await replaceFromAndDateHeadersForTemplate(tmpFile);
     
-    try {
-      await copyToTemplatesFolderForTemplate(tmpFile, templatesFolder);
-    } catch (copyError) {
-      console.error("Copy error:", copyError);
+    copyToTemplatesFolderForTemplate(tmpFile, templatesFolder).then(() => {
       try { tmpFile.remove(false); } catch {}
-      Services.prompt.alert(window, "Error", `Copy failed: ${copyError.message}`);
-      return;
-    }
+      delete window._lastEmlAttachment;
 
-    try { tmpFile.remove(false); } catch {}
+      const tabInfo = window.tabmail?.currentTabInfo;
+      if (tabInfo) {
+        window.tabmail.closeTab(tabInfo);
+      }
 
-    delete window._lastEmlAttachment;
-
-    const tabInfo = window.tabmail?.currentTabInfo;
-    if (tabInfo) {
-      window.tabmail.closeTab(tabInfo);
-    }
-
-    Services.prompt.alert(window, "Success", "Message saved as template.");
+      Services.prompt.alert(window, "Success", "Message saved as template.");
+    }).catch(e => {
+      console.error("Copy error:", e);
+      try { tmpFile.remove(false); } catch {}
+      Services.prompt.alert(window, "Error", `Copy failed: ${e.message}`);
+    });
 
   } catch (e) {
     console.error("saveEmlFromStoredAttachment:", e);
