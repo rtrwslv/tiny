@@ -1,36 +1,60 @@
-async function saveEmlFromStoredAttachment() {
-  try {
-    const attachment = window._lastEmlAttachment;
-    
-    const tmpFile = await streamAttachmentToTempFileForTemplate(attachment);
+function copyToTemplatesFolderForTemplate(emlFile, templatesFolder) {
+  return new Promise((resolve, reject) => {
+    console.log("=== copyToTemplatesFolder START ===");
+    console.log("emlFile:", emlFile.path);
+    console.log("templatesFolder:", templatesFolder.name);
 
-    const templatesFolder = getTemplatesFolderForTemplate();
-    if (!templatesFolder) {
-      try { tmpFile.remove(false); } catch {}
-      Services.prompt.alert(window, "Error", "Templates folder not found.");
-      return;
+    const copyListener = {
+      QueryInterface: ChromeUtils.generateQI(["nsIMsgCopyServiceListener"]),
+      
+      OnStartCopy() {
+        console.log("OnStartCopy called");
+      },
+      
+      OnProgress(progress, progressMax) {
+        console.log("OnProgress:", progress, "/", progressMax);
+      },
+      
+      SetMessageKey(msgKey) {
+        console.log("SetMessageKey:", msgKey);
+      },
+      
+      GetMessageId() {
+        return null;
+      },
+      
+      OnStopCopy(statusCode) {
+        console.log("OnStopCopy called, status:", statusCode);
+        console.log("isSuccess:", Components.isSuccessCode(statusCode));
+        
+        if (Components.isSuccessCode(statusCode)) {
+          console.log("Resolving promise");
+          resolve();
+        } else {
+          console.log("Rejecting promise");
+          reject(new Error(`copyFileMessage failed: 0x${statusCode.toString(16)}`));
+        }
+      },
+    };
+
+    try {
+      console.log("Calling MailServices.copy.copyFileMessage");
+      
+      MailServices.copy.copyFileMessage(
+        emlFile,
+        templatesFolder,
+        null,
+        false,
+        Ci.nsMsgMessageFlags.Template,
+        "",
+        copyListener,
+        null
+      );
+      
+      console.log("copyFileMessage called successfully");
+    } catch (e) {
+      console.error("copyFileMessage threw error:", e);
+      reject(e);
     }
-
-    await replaceFromAndDateHeadersForTemplate(tmpFile);
-    
-    copyToTemplatesFolderForTemplate(tmpFile, templatesFolder).then(() => {
-      try { tmpFile.remove(false); } catch {}
-      delete window._lastEmlAttachment;
-
-      const tabInfo = window.tabmail?.currentTabInfo;
-      if (tabInfo) {
-        window.tabmail.closeTab(tabInfo);
-      }
-
-      Services.prompt.alert(window, "Success", "Message saved as template.");
-    }).catch(e => {
-      console.error("Copy error:", e);
-      try { tmpFile.remove(false); } catch {}
-      Services.prompt.alert(window, "Error", `Copy failed: ${e.message}`);
-    });
-
-  } catch (e) {
-    console.error("saveEmlFromStoredAttachment:", e);
-    Services.prompt.alert(window, "Error", `Failed: ${e.message}`);
-  }
+  });
 }
