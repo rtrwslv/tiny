@@ -9,9 +9,9 @@ async function saveEmlAttachmentAsTemplateFromTab() {
 
     const emlContent = await new Promise((resolve, reject) => {
       try {
-        const msgService = MailServices.messageServiceFromURI(
-          `mid:${msgHdr.messageId}`
-        );
+        const msgService = Cc["@mozilla.org/messenger;1"]
+          .getService(Ci.nsIMessenger)
+          .messageServiceFromURI(`mid:${msgHdr.messageId}`);
 
         const streamListener = {
           QueryInterface: ChromeUtils.generateQI(["nsIStreamListener"]),
