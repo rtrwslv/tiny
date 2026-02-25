@@ -1,89 +1,53 @@
-async function saveEmlAttachmentAsTemplateFromTab() {
-  try {
-    const tabInfo = window.tabmail.currentTabInfo;
-    const msgHdr = tabInfo.message;
-    
-    if (!msgHdr) {
-      throw new Error("Message not found");
+const msgId = window.tabmail.currentTabInfo.message.messageId;
+
+// Функция поиска родительского письма
+async function findParentMessage(messageId) {
+  for (const account of MailServices.accounts.accounts) {
+    const rootFolder = account.incomingServer.rootFolder;
+    const result = await searchFolderForParent(rootFolder, messageId);
+    if (result) {
+      return result;
     }
-
-    const emlContent = await new Promise((resolve, reject) => {
-      try {
-        const msgService = MailServices.messageServiceFromURI(`mid:${msgHdr.messageId}`);
-
-        const streamListener = {
-          QueryInterface: ChromeUtils.generateQI(["nsIStreamListener"]),
-          _data: [],
-          onStartRequest(request) {},
-          onDataAvailable(request, inputStream, offset, count) {
-            const binaryStream = Cc["@mozilla.org/binaryinputstream;1"]
-              .createInstance(Ci.nsIBinaryInputStream);
-            binaryStream.setInputStream(inputStream);
-            this._data.push(binaryStream.readBytes(count));
-          },
-          onStopRequest(request, statusCode) {
-            if (Components.isSuccessCode(statusCode)) {
-              resolve(this._data.join(""));
-            } else {
-              reject(new Error(`Stream failed: 0x${statusCode.toString(16)}`));
-            }
-          }
-        };
-
-        msgService.streamMessage(
-          `mid:${msgHdr.messageId}`,
-          streamListener,
-          null,
-          null,
-          false,
-          null
-        );
-      } catch (e) {
-        const browser = tabInfo.chromeBrowser || tabInfo.browser;
-        if (browser?.contentDocument) {
-          const pre = browser.contentDocument.querySelector("pre");
-          if (pre) {
-            resolve(pre.textContent);
-            return;
-          }
-        }
-        reject(e);
-      }
-    });
-    
-    if (!emlContent) {
-      throw new Error("Could not extract message content");
-    }
-
-    const tmpFile = Services.dirsvc.get("TmpD", Ci.nsIFile).clone();
-    tmpFile.append("tb_eml_template.eml");
-    tmpFile.createUnique(Ci.nsIFile.NORMAL_FILE_TYPE, 0o600);
-
-    const foStream = Cc["@mozilla.org/network/file-output-stream;1"]
-      .createInstance(Ci.nsIFileOutputStream);
-    foStream.init(tmpFile, 0x02 | 0x08 | 0x20, 0o600, 0);
-    foStream.write(emlContent, emlContent.length);
-    foStream.close();
-
-    const templatesFolder = getTemplatesFolder();
-    if (!templatesFolder) {
-      tmpFile.remove(false);
-      Services.prompt.alert(window, "Error", "Templates folder not found.");
-      return;
-    }
-
-    await replaceFromAndDateHeaders(tmpFile);
-    await copyToTemplatesFolder(tmpFile, templatesFolder);
-
-    try {
-      tmpFile.remove(false);
-    } catch {}
-
-    window.tabmail.closeTab(tabInfo);
-    Services.prompt.alert(window, "Success", "Message saved as template.");
-
-  } catch (e) {
-    console.error("saveEmlAttachmentAsTemplateFromTab:", e);
-    Services.prompt.alert(window, "Error", `Failed: ${e.message}`);
   }
+  return null;
 }
+
+async function searchFolderForParent(folder, childMessageId) {
+  try {
+    // Ищем письмо которое содержит этот messageId как вложение
+    const enumerator = folder.messages;
+    while (enumerator.hasMoreElements()) {
+      const msgHdr = enumerator.getNext();
+      
+      // Проверяем есть ли у этого письма вложения
+      const attachments = msgHdr.getStringProperty("attachmentNames");
+      if (attachments && attachments.includes(".eml")) {
+        // Потенциальный кандидат — нужно проверить глубже
+        console.log("Found potential parent:", msgHdr.subject);
+        return msgHdr;
+      }
+    }
+  } catch (e) {
+    console.error("Error searching folder:", e);
+  }
+
+  // Рекурсивно по подпапкам
+  for (const subFolder of folder.subFolders) {
+    const result = await searchFolderForParent(subFolder, childMessageId);
+    if (result) {
+      return result;
+    }
+  }
+
+  return null;
+}
+
+// Запускаем поиск
+findParentMessage(msgId).then(parent => {
+  if (parent) {
+    console.log("FOUND PARENT:", parent.subject);
+    console.log("parent folder:", parent.folder.name);
+  } else {
+    console.log("Parent not found");
+  }
+});
