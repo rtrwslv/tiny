@@ -1,4 +1,4 @@
-async function getTemplatesFolderForTemplate() {
+function getTemplatesFolderForTemplate() {
   const defaultAccount = MailServices.accounts.defaultAccount;
   if (!defaultAccount) {
     return null;
@@ -14,46 +14,16 @@ async function getTemplatesFolderForTemplate() {
       const templatesFolder = MailUtils.getOrCreateFolder(identity.tmplFolderUri);
       
       if (templatesFolder) {
-        const server = templatesFolder.server;
+        const exists = templatesFolder.filePath?.exists();
         
-        if (server?.type === "imap") {
-          const exists = templatesFolder.filePath?.exists();
-          
-          if (!exists) {
-            console.log("IMAP Templates folder doesn't exist, creating on server...");
-            
-            try {
-              const rootFolder = server.rootFolder;
-              
-              await new Promise((resolve, reject) => {
-                rootFolder.createSubfolder("Templates", {
-                  OnStopRunningUrl(url, exitCode) {
-                    Components.isSuccessCode(exitCode) ? resolve() : reject();
-                  }
-                });
-              });
-              
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              
-              const newFolder = rootFolder.getChildNamed("Templates");
-              if (newFolder) {
-                newFolder.setFlag(Ci.nsMsgFolderFlags.Templates);
-                return newFolder;
-              }
-            } catch (e) {
-              console.error("IMAP folder creation failed:", e);
-            }
-            
-            console.log("Failed to create IMAP folder, using Local Folders");
-          } else {
-            return templatesFolder;
-          }
-        } else {
+        if (exists) {
           return templatesFolder;
         }
+        
+        console.log("Configured Templates folder doesn't exist physically, falling back to Local Folders");
       }
     } catch (e) {
-      console.error("IMAP folder error:", e);
+      console.log("Failed to get configured Templates folder:", e);
     }
   }
 
@@ -70,23 +40,13 @@ async function getTemplatesFolderForTemplate() {
       templatesFolder = localRoot.getFolderWithFlags(Ci.nsMsgFolderFlags.Templates);
     } catch {}
     
-    if (!templatesFolder) {
+    if (!templatesFolder && localRoot.canCreateSubfolders) {
+      templatesFolder = localRoot.createLocalSubfolder("Templates");
+      templatesFolder.setFlag(Ci.nsMsgFolderFlags.Templates);
+      
       try {
-        await new Promise((resolve, reject) => {
-          localRoot.createSubfolder("Templates", {
-            OnStopRunningUrl(url, exitCode) {
-              Components.isSuccessCode(exitCode) ? resolve() : reject();
-            }
-          });
-        });
-        
-        templatesFolder = localRoot.getChildNamed("Templates");
-        if (templatesFolder) {
-          templatesFolder.setFlag(Ci.nsMsgFolderFlags.Templates);
-        }
-      } catch (e) {
-        console.error("Failed to create Templates in Local Folders:", e);
-      }
+        localRoot.NotifyFolderAdded(templatesFolder);
+      } catch {}
     }
     
     if (templatesFolder) {
