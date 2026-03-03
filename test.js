@@ -1,4 +1,4 @@
-function getTemplatesFolderForTemplate() {
+async function getTemplatesFolderForTemplate() {
   const defaultAccount = MailServices.accounts.defaultAccount;
   if (!defaultAccount) {
     return null;
@@ -14,16 +14,46 @@ function getTemplatesFolderForTemplate() {
       const templatesFolder = MailUtils.getOrCreateFolder(identity.tmplFolderUri);
       
       if (templatesFolder) {
-        const exists = templatesFolder.filePath?.exists();
+        const server = templatesFolder.server;
         
-        if (exists) {
+        if (server?.type === "imap") {
+          const exists = templatesFolder.filePath?.exists();
+          
+          if (!exists) {
+            console.log("IMAP Templates folder doesn't exist, creating on server...");
+            
+            try {
+              const rootFolder = server.rootFolder;
+              
+              await new Promise((resolve, reject) => {
+                rootFolder.createSubfolder("Templates", {
+                  OnStopRunningUrl(url, exitCode) {
+                    Components.isSuccessCode(exitCode) ? resolve() : reject();
+                  }
+                });
+              });
+              
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              const newFolder = rootFolder.getChildNamed("Templates");
+              if (newFolder) {
+                newFolder.setFlag(Ci.nsMsgFolderFlags.Templates);
+                return newFolder;
+              }
+            } catch (e) {
+              console.error("IMAP folder creation failed:", e);
+            }
+            
+            console.log("Failed to create IMAP folder, using Local Folders");
+          } else {
+            return templatesFolder;
+          }
+        } else {
           return templatesFolder;
         }
-        
-        console.log("Configured Templates folder doesn't exist physically, falling back to Local Folders");
       }
     } catch (e) {
-      console.log("Failed to get configured Templates folder:", e);
+      console.error("IMAP folder error:", e);
     }
   }
 
@@ -40,13 +70,23 @@ function getTemplatesFolderForTemplate() {
       templatesFolder = localRoot.getFolderWithFlags(Ci.nsMsgFolderFlags.Templates);
     } catch {}
     
-    if (!templatesFolder && localRoot.canCreateSubfolders) {
-      templatesFolder = localRoot.createLocalSubfolder("Templates");
-      templatesFolder.setFlag(Ci.nsMsgFolderFlags.Templates);
-      
+    if (!templatesFolder) {
       try {
-        localRoot.NotifyFolderAdded(templatesFolder);
-      } catch {}
+        await new Promise((resolve, reject) => {
+          localRoot.createSubfolder("Templates", {
+            OnStopRunningUrl(url, exitCode) {
+              Components.isSuccessCode(exitCode) ? resolve() : reject();
+            }
+          });
+        });
+        
+        templatesFolder = localRoot.getChildNamed("Templates");
+        if (templatesFolder) {
+          templatesFolder.setFlag(Ci.nsMsgFolderFlags.Templates);
+        }
+      } catch (e) {
+        console.error("Failed to create Templates in Local Folders:", e);
+      }
     }
     
     if (templatesFolder) {
