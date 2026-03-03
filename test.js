@@ -1,84 +1,39 @@
-async function openRepliesForMessage(msgHdr, tabmail) {
-  if (!msgHdr) {
-    return;
+function getTemplatesFolderForTemplate() {
+  let identity = null;
+  
+  const defaultAccount = MailServices.accounts.defaultAccount;
+  if (defaultAccount) {
+    identity = defaultAccount.defaultIdentity;
   }
 
-  const glodaMsg = await new Promise((resolve, reject) => {
-    Gloda.getMessageCollectionForHeader(msgHdr, {
-      onItemsAdded(items, collection) {},
-      onQueryCompleted(collection) {
-        resolve(collection.items[0] ?? null);
-      },
-      onQueryError(error) {
-        reject(error);
-      },
-    });
-  });
-
-  if (!glodaMsg?.conversation) {
-    return;
+  if (identity?.stationeryFolder) {
+    try {
+      const folder = MailUtils.getOrCreateFolder(identity.stationeryFolder);
+      if (folder) {
+        return folder;
+      }
+    } catch {}
   }
 
-  const conversationCollection = await new Promise((resolve, reject) => {
-    glodaMsg.conversation.getMessagesCollection({
-      onItemsAdded(items, collection) {},
-      onQueryCompleted(collection) {
-        resolve(collection);
-      },
-      onQueryError(error) {
-        reject(error);
-      },
-    });
-  });
-
-  if (!conversationCollection.items.length) {
-    return;
+  if (defaultAccount) {
+    try {
+      const rootFolder = defaultAccount.incomingServer.rootFolder;
+      const templatesFolder = rootFolder.getFolderWithFlags(Ci.nsMsgFolderFlags.Templates);
+      if (templatesFolder) {
+        return templatesFolder;
+      }
+    } catch {}
   }
 
-  const myEmails = new Set(
-    Array.from(MailServices.accounts.allIdentities).map(id =>
-      id.email.toLowerCase()
-    )
-  );
-
-  const originalMessageId = msgHdr.messageId;
-
-  const filteredGlodaMessages = conversationCollection.items.filter(glodaReply => {
-    if (glodaReply.headerMessageID === originalMessageId) {
-      return false;
+  try {
+    for (const account of MailServices.accounts.accounts) {
+      const rootFolder = account.incomingServer.rootFolder;
+      const templatesFolder = rootFolder.getFolderWithFlags(Ci.nsMsgFolderFlags.Templates);
+      if (templatesFolder) {
+        return templatesFolder;
+      }
     }
+  } catch {}
 
-    const authorEmail = glodaReply.from?.value?.toLowerCase();
-    if (!myEmails.has(authorEmail)) {
-      return false;
-    }
-
-    const folderMsg = glodaReply.folderMessage;
-    if (!folderMsg) {
-      return false;
-    }
-
-    const references = folderMsg.getStringProperty("references") || "";
-    const inReplyTo = folderMsg.getStringProperty("in-reply-to") || "";
-
-    return (
-      references.includes(originalMessageId) ||
-      inReplyTo.includes(originalMessageId)
-    );
-  });
-
-  if (!filteredGlodaMessages.length) {
-    return;
-  }
-
-  conversationCollection.items = filteredGlodaMessages;
-
-  const syntheticView = new GlodaSyntheticView({
-    collection: conversationCollection,
-  });
-
-  tabmail.openTab("mail3PaneTab", {
-    syntheticView,
-    background: false,
-  });
+  return null;
 }
