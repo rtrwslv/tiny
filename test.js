@@ -43,38 +43,42 @@ async function openRepliesForMessage(msgHdr, tabmail) {
 
   const originalMessageId = msgHdr.messageId;
 
-  const replyHeaders = conversationCollection.items
-    .filter(glodaReply => {
-      if (glodaReply.headerMessageID === originalMessageId) {
-        return false;
-      }
+  const filteredGlodaMessages = conversationCollection.items.filter(glodaReply => {
+    if (glodaReply.headerMessageID === originalMessageId) {
+      return false;
+    }
 
-      const authorEmail = glodaReply.from?.value?.toLowerCase();
-      if (!myEmails.has(authorEmail)) {
-        return false;
-      }
+    const authorEmail = glodaReply.from?.value?.toLowerCase();
+    if (!myEmails.has(authorEmail)) {
+      return false;
+    }
 
-      const folderMsg = glodaReply.folderMessage;
-      if (!folderMsg) {
-        return false;
-      }
+    const folderMsg = glodaReply.folderMessage;
+    if (!folderMsg) {
+      return false;
+    }
 
-      const references = folderMsg.getStringProperty("references") || "";
-      const inReplyTo = folderMsg.getStringProperty("in-reply-to") || "";
+    const references = folderMsg.getStringProperty("references") || "";
+    const inReplyTo = folderMsg.getStringProperty("in-reply-to") || "";
 
-      return (
-        references.includes(originalMessageId) ||
-        inReplyTo.includes(originalMessageId)
-      );
-    })
-    .map(glodaReply => glodaReply.folderMessage);
+    return (
+      references.includes(originalMessageId) ||
+      inReplyTo.includes(originalMessageId)
+    );
+  });
 
-  if (!replyHeaders.length) {
+  if (!filteredGlodaMessages.length) {
     return;
   }
 
-  new ConversationOpener(tabmail.ownerGlobal).openConversationForMessages(
-    replyHeaders,
-    false
-  );
+  conversationCollection.items = filteredGlodaMessages;
+
+  const syntheticView = new GlodaSyntheticView({
+    collection: conversationCollection,
+  });
+
+  tabmail.openTab("mail3PaneTab", {
+    syntheticView,
+    background: false,
+  });
 }
