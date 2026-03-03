@@ -1,4 +1,4 @@
-static async openRepliesForMessage(msgHdr, tabmail) {
+async function openRepliesForMessage(msgHdr, tabmail) {
   if (!msgHdr) {
     return;
   }
@@ -43,40 +43,38 @@ static async openRepliesForMessage(msgHdr, tabmail) {
 
   const originalMessageId = msgHdr.messageId;
 
-  conversationCollection.items = conversationCollection.items.filter(glodaReply => {
-    if (glodaReply.headerMessageID === originalMessageId) {
-      return false;
-    }
+  const replyHeaders = conversationCollection.items
+    .filter(glodaReply => {
+      if (glodaReply.headerMessageID === originalMessageId) {
+        return false;
+      }
 
-    const authorEmail = glodaReply.from?.value?.toLowerCase();
-    if (!myEmails.has(authorEmail)) {
-      return false;
-    }
+      const authorEmail = glodaReply.from?.value?.toLowerCase();
+      if (!myEmails.has(authorEmail)) {
+        return false;
+      }
 
-    const folderMsg = glodaReply.folderMessage;
-    if (!folderMsg) {
-      return false;
-    }
+      const folderMsg = glodaReply.folderMessage;
+      if (!folderMsg) {
+        return false;
+      }
 
-    const references = folderMsg.getStringProperty("references") || "";
-    const inReplyTo = folderMsg.getStringProperty("in-reply-to") || "";
+      const references = folderMsg.getStringProperty("references") || "";
+      const inReplyTo = folderMsg.getStringProperty("in-reply-to") || "";
 
-    return (
-      references.includes(originalMessageId) ||
-      inReplyTo.includes(originalMessageId)
-    );
-  });
+      return (
+        references.includes(originalMessageId) ||
+        inReplyTo.includes(originalMessageId)
+      );
+    })
+    .map(glodaReply => glodaReply.folderMessage);
 
-  if (!conversationCollection.items.length) {
+  if (!replyHeaders.length) {
     return;
   }
 
-  const syntheticView = new GlodaSyntheticView({
-    collection: conversationCollection,
-  });
-
-  ConversationOpener.openConversation(
-    tabmail.ownerGlobal,
-    syntheticView
+  new ConversationOpener(tabmail.ownerGlobal).openConversationForMessages(
+    replyHeaders,
+    false
   );
 }
