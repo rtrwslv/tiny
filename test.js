@@ -3,48 +3,26 @@ async function copyToTemplatesFolderForTemplate(emlFile, templatesFolder) {
   console.log("emlFile:", emlFile.path);
   console.log("templatesFolder:", templatesFolder.name);
   console.log("templatesFolder.server.type:", templatesFolder.server?.type);
-  console.log("templatesFolder.URI:", templatesFolder.URI);
+
+  if (templatesFolder.server?.type === "imap") {
+    console.log("IMAP detected, using alternative method");
+    return await copyToIMAPTemplatesFolder(emlFile, templatesFolder);
+  }
 
   return new Promise((resolve, reject) => {
     const copyListener = {
-      QueryInterface: ChromeUtils.generateQI([
-        "nsIMsgCopyServiceListener",
-        "nsISupports"
-      ]),
-      
-      OnStartCopy() {
-        console.log("OnStartCopy called");
-      },
-      
-      OnProgress(progress, progressMax) {
-        console.log("OnProgress:", progress, "/", progressMax);
-      },
-      
-      SetMessageKey(msgKey) {
-        console.log("SetMessageKey:", msgKey);
-      },
-      
-      GetMessageId(messageId) {
-        return null;
-      },
-      
+      QueryInterface: ChromeUtils.generateQI(["nsIMsgCopyServiceListener"]),
+      OnStartCopy() { console.log("OnStartCopy"); },
+      OnProgress(p, m) { console.log("OnProgress:", p, m); },
+      SetMessageKey(k) { console.log("SetMessageKey:", k); },
+      GetMessageId() { return null; },
       OnStopCopy(statusCode) {
-        console.log("OnStopCopy called, status:", statusCode);
-        console.log("isSuccess:", Components.isSuccessCode(statusCode));
-        
-        if (Components.isSuccessCode(statusCode)) {
-          console.log("Resolving promise");
-          resolve();
-        } else {
-          console.log("Rejecting promise");
-          reject(new Error(`copyFileMessage failed: 0x${statusCode.toString(16)}`));
-        }
+        console.log("OnStopCopy:", statusCode);
+        Components.isSuccessCode(statusCode) ? resolve() : reject(new Error(`failed: 0x${statusCode.toString(16)}`));
       },
     };
 
     try {
-      console.log("Calling MailServices.copy.copyFileMessage");
-      
       MailServices.copy.copyFileMessage(
         emlFile,
         templatesFolder,
@@ -55,11 +33,86 @@ async function copyToTemplatesFolderForTemplate(emlFile, templatesFolder) {
         copyListener,
         null
       );
-      
-      console.log("copyFileMessage called");
     } catch (e) {
-      console.error("copyFileMessage threw error:", e);
       reject(e);
     }
   });
+}
+
+async function copyToIMAPTemplatesFolder(emlFile, templatesFolder) {
+  console.log("=== IMAP copy method ===");
+  
+  try {
+    const localServer = MailServices.accounts.localFoldersServer;
+    const localRoot = localServer.rootFolder;
+    let localTemplates = null;
+    
+    try {
+      localTemplates = localRoot.getChildNamed("TempTemplates");
+    } catch {}
+    
+    if (!localTemplates) {
+      localRoot.createSubfolder("TempTemplates", null);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      localTemplates = localRoot.getChildNamed("TempTemplates");
+    }
+    
+    if (!localTemplates) {
+      throw new Error("Failed to create temp folder");
+    }
+
+    await new Promise((resolve, reject) => {
+      const copyListener = {
+        QueryInterface: ChromeUtils.generateQI(["nsIMsgCopyServiceListener"]),
+        OnStopCopy(statusCode) {
+          Components.isSuccessCode(statusCode) ? resolve() : reject();
+        },
+      };
+
+      MailServices.copy.copyFileMessage(
+        emlFile,
+        localTemplates,
+        null,
+        false,
+        Ci.nsMsgMessageFlags.Template,
+        "",
+        copyListener,
+        null
+      );
+    });
+
+    console.log("Copied to local temp, now moving to IMAP...");
+
+    const tempMessages = [...localTemplates.messages];
+    if (tempMessages.length === 0) {
+      throw new Error("No message in temp folder");
+    }
+
+    await new Promise((resolve, reject) => {
+      const moveListener = {
+        QueryInterface: ChromeUtils.generateQI(["nsIMsgCopyServiceListener"]),
+        OnStopCopy(statusCode) {
+          Components.isSuccessCode(statusCode) ? resolve() : reject();
+        },
+      };
+
+      MailServices.copy.copyMessages(
+        localTemplates,
+        tempMessages,
+        templatesFolder,
+        true,
+        moveListener,
+        null,
+        false
+      );
+    });
+
+    console.log("Moved to IMAP successfully");
+
+    localTemplates.deleteSelf(null);
+
+  } catch (e) {
+    console.error("IMAP copy failed:", e);
+    throw e;
+  }
 }
