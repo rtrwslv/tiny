@@ -1,73 +1,41 @@
-async function copyToFolderAsTemplate(emlFile, destFolder) {
-  if (!emlFile?.exists()) {
-    throw new Error("EML file does not exist");
+async function copyToTemplatesFolderForTemplate(emlFile, templatesFolder) {
+  console.log("=== copyToTemplatesFolder START ===");
+  console.log("templatesFolder:", templatesFolder.name);
+  console.log("server.type:", templatesFolder.server?.type);
+
+  if (templatesFolder.server?.type === "imap") {
+    console.log("IMAP folder detected, initializing...");
+    
+    await ensureIMAPFolderReady(templatesFolder);
   }
 
-  if (!destFolder?.canFileMessages) {
-    throw new Error("Destination folder cannot file messages");
-  }
+  MailServices.copy.copyFileMessage(
+    emlFile,
+    templatesFolder,
+    null,
+    false,
+    Ci.nsMsgMessageFlags.Template,
+    "",
+    null,
+    null
+  );
+  
+  await new Promise(resolve => setTimeout(resolve, 2000));
+}
 
-  return new Promise((resolve, reject) => {
-    let newMsgKey = null;
-
-    let listener = {
-      OnStartCopy() {},
-
-      OnProgress(progress, progressMax) {},
-
-      SetMessageKey(key) {
-        newMsgKey = key;
-      },
-
-      SetMessageId(msgId) {},
-
-      OnStopCopy(status) {
-        if (!Components.isSuccessCode(status)) {
-          reject(new Error("Copy failed: " + status));
-          return;
-        }
-
-        try {
-          // Для IMAP папок нужно обновление
-          if (destFolder.server.type === "imap") {
-            destFolder.updateFolder(null);
-          }
-
-          let hdr = null;
-
-          if (newMsgKey !== null) {
-            hdr = destFolder.msgDatabase?.GetMsgHdrForKey(newMsgKey);
-          }
-
-          // fallback — иногда IMAP не даёт key сразу
-          if (!hdr) {
-            destFolder.msgDatabase?.EnumerateMessages().forEach(h => {
-              if (h.flags & Ci.nsMsgMessageFlags.Template) {
-                hdr = h;
-              }
-            });
-          }
-
-          resolve(hdr || null);
-        } catch (e) {
-          reject(e);
-        }
-      },
-    };
-
-    try {
-      MailServices.copy.copyFileMessage(
-        emlFile,
-        destFolder,
-        null, // msgToReplace
-        false, // isDraft
-        Ci.nsMsgMessageFlags.Template,
-        "",
-        listener,
-        null
-      );
-    } catch (e) {
-      reject(e);
+async function ensureIMAPFolderReady(folder) {
+  try {
+    if (!folder.msgDatabase) {
+      console.log("Opening msgDatabase...");
+      folder.msgDatabase = folder.getMsgDatabase(null);
     }
-  });
+    
+    folder.updateFolder(null);
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    console.log("IMAP folder ready");
+  } catch (e) {
+    console.error("ensureIMAPFolderReady error:", e);
+  }
 }
