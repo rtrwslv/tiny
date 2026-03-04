@@ -1,60 +1,65 @@
-function getTemplatesFolderForTemplate() {
-  const defaultAccount = MailServices.accounts.defaultAccount;
-  if (!defaultAccount) {
-    return null;
-  }
+async function copyToTemplatesFolderForTemplate(emlFile, templatesFolder) {
+  console.log("=== copyToTemplatesFolder START ===");
+  console.log("emlFile:", emlFile.path);
+  console.log("templatesFolder:", templatesFolder.name);
+  console.log("templatesFolder.server.type:", templatesFolder.server?.type);
+  console.log("templatesFolder.URI:", templatesFolder.URI);
 
-  const identity = defaultAccount.defaultIdentity;
-  if (!identity) {
-    return null;
-  }
-
-  if (identity.tmplFolderUri) {
-    try {
-      const templatesFolder = MailUtils.getOrCreateFolder(identity.tmplFolderUri);
+  return new Promise((resolve, reject) => {
+    const copyListener = {
+      QueryInterface: ChromeUtils.generateQI([
+        "nsIMsgCopyServiceListener",
+        "nsISupports"
+      ]),
       
-      if (templatesFolder) {
-        const exists = templatesFolder.filePath?.exists();
+      OnStartCopy() {
+        console.log("OnStartCopy called");
+      },
+      
+      OnProgress(progress, progressMax) {
+        console.log("OnProgress:", progress, "/", progressMax);
+      },
+      
+      SetMessageKey(msgKey) {
+        console.log("SetMessageKey:", msgKey);
+      },
+      
+      GetMessageId(messageId) {
+        return null;
+      },
+      
+      OnStopCopy(statusCode) {
+        console.log("OnStopCopy called, status:", statusCode);
+        console.log("isSuccess:", Components.isSuccessCode(statusCode));
         
-        if (exists) {
-          return templatesFolder;
+        if (Components.isSuccessCode(statusCode)) {
+          console.log("Resolving promise");
+          resolve();
+        } else {
+          console.log("Rejecting promise");
+          reject(new Error(`copyFileMessage failed: 0x${statusCode.toString(16)}`));
         }
-        
-        console.log("Configured Templates folder doesn't exist physically, falling back to Local Folders");
-      }
-    } catch (e) {
-      console.log("Failed to get configured Templates folder:", e);
-    }
-  }
+      },
+    };
 
-  try {
-    const localServer = MailServices.accounts.localFoldersServer;
-    if (!localServer) {
-      return null;
-    }
-    
-    const localRoot = localServer.rootFolder;
-    let templatesFolder = null;
-    
     try {
-      templatesFolder = localRoot.getFolderWithFlags(Ci.nsMsgFolderFlags.Templates);
-    } catch {}
-    
-    if (!templatesFolder && localRoot.canCreateSubfolders) {
-      templatesFolder = localRoot.createLocalSubfolder("Templates");
-      templatesFolder.setFlag(Ci.nsMsgFolderFlags.Templates);
+      console.log("Calling MailServices.copy.copyFileMessage");
       
-      try {
-        localRoot.NotifyFolderAdded(templatesFolder);
-      } catch {}
+      MailServices.copy.copyFileMessage(
+        emlFile,
+        templatesFolder,
+        null,
+        false,
+        Ci.nsMsgMessageFlags.Template,
+        "",
+        copyListener,
+        null
+      );
+      
+      console.log("copyFileMessage called");
+    } catch (e) {
+      console.error("copyFileMessage threw error:", e);
+      reject(e);
     }
-    
-    if (templatesFolder) {
-      return templatesFolder;
-    }
-  } catch (e) {
-    console.error("Local Folders fallback error:", e);
-  }
-
-  return null;
+  });
 }
