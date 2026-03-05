@@ -1,3 +1,11 @@
+replied-banner-single = Вы ответили на это сообщение { $date } в { $time }
+replied-banner-multiple = Вы уже отвечали на это сообщение { $count } { $form }
+replied-banner-button-label = Перейти к ответам
+
+replied-banner-single = You replied to this message on { $date } at { $time }
+replied-banner-multiple = You have replied to this message { $count } { $form }
+replied-banner-button-label = Go to replies
+
 async function loadRepliesCount(msgHdr, bannerElement) {
   if (!msgHdr) {
     return null;
@@ -76,15 +84,17 @@ async function loadRepliesCount(msgHdr, bannerElement) {
     return null;
   }
 
+  const appLocale = Services.locale.appLocaleAsBCP47;
+
   if (filteredGlodaMessages.length === 1) {
     const folderMsg = filteredGlodaMessages[0].folderMessage;
     const date = new Date(folderMsg.date / 1000);
-    const dateStr = new Intl.DateTimeFormat(undefined, {
+    const dateStr = new Intl.DateTimeFormat(appLocale, {
       day: "numeric",
       month: "long",
       year: "numeric",
     }).format(date);
-    const timeStr = new Intl.DateTimeFormat(undefined, {
+    const timeStr = new Intl.DateTimeFormat(appLocale, {
       hour: "2-digit",
       minute: "2-digit",
     }).format(date);
@@ -93,37 +103,19 @@ async function loadRepliesCount(msgHdr, bannerElement) {
       time: timeStr,
     });
   } else {
+    const count = filteredGlodaMessages.length;
+    const pluralRules = new Intl.PluralRules(appLocale);
+    const pluralForms = {
+      "en-US": { one: "раз", few: "раза", other: "раз" },
+      "en-GB": { one: "time", other: "times" },
+    };
+    const forms = pluralForms[appLocale] ?? pluralForms["en-GB"];
+    const form = forms[pluralRules.select(count)] ?? forms.other;
     document.l10n.setAttributes(bannerElement, "replied-banner-multiple", {
-      count: filteredGlodaMessages.length,
+      count,
+      form,
     });
   }
 
   return { filteredGlodaMessages, conversationCollection };
 }
-
-async function openRepliesForMessage(filteredGlodaMessages, conversationCollection, tabmail) {
-  if (!filteredGlodaMessages?.length) {
-    return;
-  }
-
-  conversationCollection.items = filteredGlodaMessages;
-
-  const syntheticView = new GlodaSyntheticView({
-    collection: conversationCollection,
-  });
-
-  tabmail.openTab("mail3PaneTab", {
-    syntheticView,
-    background: false,
-  });
-}
-
-
-replied-banner-single = Вы ответили на это сообщение { $date } в { $time }
-replied-banner-multiple =
-    { $count ->
-        [one] Вы уже отвечали на это сообщение { $count } раз
-        [few] Вы уже отвечали на это сообщение { $count } раза
-       *[other] Вы уже отвечали на это сообщение { $count } раз
-    }
-
