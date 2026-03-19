@@ -1,15 +1,8 @@
-function waitForFolderTree(callback) {
-  if (!folderPane.isInitialized) {
-    setTimeout(() => waitForFolderTree(callback), 50);
-    return;
+// В консоли DevTools на about3Pane:
+const orig = document.dispatchEvent.bind(document);
+document.dispatchEvent = function(e) {
+  if (!e.type.startsWith("mouse") && !e.type.startsWith("pointer")) {
+    console.log("dispatchEvent:", e.type, new Error().stack.split("\n")[1]);
   }
-
-  // Проверяем что строки реально есть в DOM:
-  const rows = document.querySelectorAll(`li[is="folder-tree-row"]`);
-  if (rows.length === 0) {
-    setTimeout(() => waitForFolderTree(callback), 50);
-    return;
-  }
-
-  callback();
-}
+  return orig(e);
+};
