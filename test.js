@@ -1,9 +1,8 @@
-async function openRepliesCrossFolder(msgHdr) {
+async function findReplies(msgHdr) {
   if (!msgHdr) {
-    return;
+    return [];
   }
 
-  // 1. Gloda message
   const glodaMsg = await new Promise((resolve, reject) => {
     Gloda.getMessageCollectionForHeader(msgHdr, {
       onItemsAdded() {},
@@ -17,11 +16,10 @@ async function openRepliesCrossFolder(msgHdr) {
   });
 
   if (!glodaMsg?.conversation) {
-    return;
+    return [];
   }
 
-  // 2. Get conversation messages
-  const conversationCollection = await new Promise((resolve, reject) => {
+  const conversation = await new Promise((resolve, reject) => {
     glodaMsg.conversation.getMessagesCollection({
       onItemsAdded() {},
       onQueryCompleted(c) {
@@ -33,12 +31,11 @@ async function openRepliesCrossFolder(msgHdr) {
     });
   });
 
-  const items = conversationCollection.items || [];
+  const items = conversation.items || [];
   if (!items.length) {
-    return;
+    return [];
   }
 
-  // 3. My emails filter
   const myEmails = new Set(
     Array.from(MailServices.accounts.allIdentities)
       .map(i => i.email?.toLowerCase())
@@ -47,14 +44,13 @@ async function openRepliesCrossFolder(msgHdr) {
 
   const originalId = msgHdr.messageId;
 
-  // 4. Filter replies across folders
   const replies = items.filter(m => {
     if (m.headerMessageID === originalId) {
       return false;
     }
 
-    const author = m.from?.value?.toLowerCase();
-    if (!myEmails.has(author)) {
+    const from = m.from?.value?.toLowerCase();
+    if (!myEmails.has(from)) {
       return false;
     }
 
@@ -72,34 +68,73 @@ async function openRepliesCrossFolder(msgHdr) {
     );
   });
 
-  if (!replies.length) {
-    return;
-  }
-
-  // 5. Convert to real nsIMsgDBHdr (IMPORTANT)
-  const hdrs = replies
-    .map(m => m.folderMessage)
-    .filter(Boolean);
-
-  // 6. Deduplicate across folders (important for IMAP copies)
+  // dedupe across folders
   const unique = new Map();
 
-  for (const h of hdrs) {
-    const key = h.messageKey + ":" + h.folder.URI;
+  for (const m of replies) {
+    const hdr = m.folderMessage;
+    if (!hdr) {
+      continue;
+    }
+
+    const key = hdr.messageKey + ":" + hdr.folder.URI;
     if (!unique.has(key)) {
-      unique.set(key, h);
+      unique.set(key, m);
     }
   }
 
-  const finalHdrs = Array.from(unique.values());
+  return Array.from(unique.values());
+}
 
-  // 7. OPEN NATIVE THUNDERBIRD VIEW
-  const win = Services.wm.getMostRecentWindow("mail:3pane");
-
-  if (!win?.MailUtils?.displayMessages) {
-    console.error("MailUtils.displayMessages not available");
+async function openRepliesView(msgHdr, replies) {
+  if (!replies?.length) {
     return;
   }
 
-  win.MailUtils.displayMessages(finalHdrs);
+  const win = Services.wm.getMostRecentWindow("mail:3pane");
+
+  if (!win?.openTab) {
+    return;
+  }
+
+  const session = Cc[
+    "@mozilla.org/messenger/searchSession;1"
+  ].createInstance(Ci.nsIMsgSearchSession);
+
+  const folders = new Set();
+
+  // scope + terms
+  for (const m of replies) {
+    const hdr = m.folderMessage;
+    if (!hdr) {
+      continue;
+    }
+
+    const folder = hdr.folder;
+    if (folder) {
+      folders.add(folder);
+    }
+
+    const term = session.createTerm();
+    const value = term.value;
+    value.str = hdr.messageId;
+
+    term.value = value;
+    term.attrib = Ci.nsMsgSearchAttrib.MessageId;
+    term.op = Ci.nsMsgSearchOp.Contains;
+
+    session.appendTerm(term);
+  }
+
+  for (const f of folders) {
+    session.addScopeTerm(
+      Ci.nsMsgSearchScope.Folder,
+      f
+    );
+  }
+
+  win.openTab("folderSearchTab", {
+    searchSession: session,
+    background: false,
+  });
 }
