@@ -1,32 +1,95 @@
-async function openRepliesAsFolderView(msgHdr) {
-  const replies = await findReplies(msgHdr);
-  if (!replies.length) {
-    return;
+async function collectReplyCollection(msgHdr) {
+  if (!msgHdr) {
+    return null;
   }
 
-  const win = Services.wm.getMostRecentWindow("mail:3pane");
-  const tabmail = win.gTabmail;
-
-  // ensure folder is open
-  tabmail.openTab("mail3PaneTab", {
-    folder: msgHdr.folder,
-    background: false,
+  const glodaMsg = await new Promise((resolve, reject) => {
+    Gloda.getMessageCollectionForHeader(msgHdr, {
+      onItemsAdded() {},
+      onQueryCompleted(collection) {
+        resolve(collection.items[0] ?? null);
+      },
+      onQueryError(err) {
+        reject(err);
+      },
+    });
   });
 
-  setTimeout(() => {
-    const about3Pane = tabmail.currentAbout3Pane;
-    const view = about3Pane?.gDBView;
+  if (!glodaMsg?.conversation) {
+    return null;
+  }
 
-    if (!view) {
-      return;
+  const conversationCollection = await new Promise((resolve, reject) => {
+    glodaMsg.conversation.getMessagesCollection({
+      onItemsAdded() {},
+      onQueryCompleted(c) {
+        resolve(c);
+      },
+      onQueryError(err) {
+        reject(err);
+      },
+    });
+  });
+
+  const items = conversationCollection.items || [];
+  if (!items.length) {
+    return null;
+  }
+
+  const originalId = msgHdr.messageId;
+
+  const seen = new Set();
+
+  const myEmails = new Set(
+    Array.from(MailServices.accounts.allIdentities)
+      .map(i => i.email?.toLowerCase())
+      .filter(Boolean)
+  );
+
+  const filtered = [];
+
+  for (const m of items) {
+    const hdr = m.folderMessage;
+    if (!hdr) {
+      continue;
     }
 
-    // collect hdrs
-    const hdrs = replies
-      .map(m => m.folderMessage)
-      .filter(Boolean);
+    const id = hdr.messageId;
 
-    // IMPORTANT: use selectItems → native folder UI
-    view.selectItems(hdrs.length, hdrs);
-  }, 300);
+    // dedupe across folders / gloda duplicates
+    const uniqueKey = id + "::" + hdr.folder?.URI;
+    if (seen.has(uniqueKey)) {
+      continue;
+    }
+    seen.add(uniqueKey);
+
+    // exclude original message
+    if (id === originalId) {
+      continue;
+    }
+
+    // only messages FROM others replying TO me (твоя логика)
+    const author = m.from?.value?.toLowerCase();
+    if (myEmails.has(author)) {
+      continue;
+    }
+
+    const refs = hdr.getStringProperty("references") || "";
+    const inReplyTo = hdr.getStringProperty("in-reply-to") || "";
+
+    const isReply =
+      refs.includes(originalId) ||
+      inReplyTo.includes(originalId);
+
+    if (!isReply) {
+      continue;
+    }
+
+    filtered.push(m);
+  }
+
+  return {
+    items: filtered,
+    query: conversationCollection.query,
+  };
 }
