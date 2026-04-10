@@ -1,53 +1,35 @@
-async function collectRepliesForSyntheticView(msgHdr) {
-  if (!msgHdr) {
-    return null;
-  }
-
+async function collectReplyMessageIds(msgHdr) {
   const glodaMsg = await new Promise((resolve, reject) => {
     Gloda.getMessageCollectionForHeader(msgHdr, {
       onItemsAdded() {},
-      onQueryCompleted(collection) {
-        resolve(collection.items[0] ?? null);
+      onQueryCompleted(c) {
+        resolve(c.items[0] ?? null);
       },
-      onQueryError(err) {
-        reject(err);
+      onQueryError(e) {
+        reject(e);
       },
     });
   });
 
   if (!glodaMsg?.conversation) {
-    return null;
+    return [];
   }
 
-  const conversationCollection = await new Promise((resolve, reject) => {
+  const conv = await new Promise((resolve, reject) => {
     glodaMsg.conversation.getMessagesCollection({
       onItemsAdded() {},
       onQueryCompleted(c) {
         resolve(c);
       },
-      onQueryError(err) {
-        reject(err);
+      onQueryError(e) {
+        reject(e);
       },
     });
   });
 
-  const items = conversationCollection.items || [];
-  if (!items.length) {
-    return null;
-  }
+  const ids = new Set();
 
-  const originalId = msgHdr.messageId;
-
-  const seen = new Set();
-  const myEmails = new Set(
-    Array.from(MailServices.accounts.allIdentities)
-      .map(i => i.email?.toLowerCase())
-      .filter(Boolean)
-  );
-
-  const filtered = [];
-
-  for (const m of items) {
+  for (const m of conv.items) {
     const hdr = m.folderMessage;
     if (!hdr) {
       continue;
@@ -55,75 +37,41 @@ async function collectRepliesForSyntheticView(msgHdr) {
 
     const id = hdr.messageId;
 
-    // 🔥 HARD DEDUPE (cross-folder safe)
-    const key = hdr.messageKey + "::" + hdr.folder?.URI;
-    if (seen.has(key)) {
-      continue;
+    if (id && id !== msgHdr.messageId) {
+      ids.add(id);
     }
-    seen.add(key);
-
-    // exclude original
-    if (id === originalId) {
-      continue;
-    }
-
-    // optional: only real replies in thread
-    const refs = hdr.getStringProperty("references") || "";
-    const inReplyTo = hdr.getStringProperty("in-reply-to") || "";
-
-    const isReply =
-      refs.includes(originalId) ||
-      inReplyTo.includes(originalId);
-
-    if (!isReply) {
-      continue;
-    }
-
-    filtered.push(hdr); // ⚠️ IMPORTANT: ONLY DBHDR, NO Gloda object
   }
 
-  // 🔥 FINAL SORT (deterministic, fixes “last = penultimate”)
-  filtered.sort((a, b) => {
-    if (a.date !== b.date) {
-      return a.date - b.date;
-    }
-    return a.messageKey - b.messageKey;
-  });
-
-  return {
-    items: filtered.map(hdr => ({
-      folderMessage: hdr,
-      messageKey: hdr.messageKey,
-      messageId: hdr.messageId,
-      date: hdr.date,
-    })),
-    query: conversationCollection.query,
-  };
+  return Array.from(ids);
 }
 
+function openRepliesAsSearchFolder(msgHdr, messageIds, tabmail) {
+  const session = Cc[
+    "@mozilla.org/messenger/searchSession;1"
+  ].createInstance(Ci.nsIMsgSearchSession);
 
-function openRepliesSyntheticView(collection, tabmail) {
-  if (!collection?.items?.length) {
-    return;
+  const folder = msgHdr.folder;
+
+  session.addScopeTerm(
+    Ci.nsMsgSearchScope.Folder,
+    folder
+  );
+
+  for (const id of messageIds) {
+    const term = session.createTerm();
+    const value = term.value;
+    value.str = id;
+
+    term.value = value;
+    term.attrib = Ci.nsMsgSearchAttrib.MessageId;
+    term.op = Ci.nsMsgSearchOp.Is;
+
+    session.appendTerm(term);
   }
 
-  // 🔥 IMPORTANT: fresh object identity (prevents Gloda reuse bugs)
-  const cleanCollection = {
-    items: collection.items.map(i => ({
-      folderMessage: i.folderMessage,
-      messageKey: i.messageKey,
-      messageId: i.messageId,
-      date: i.date,
-    })),
-    query: collection.query,
-  };
-
-  const view = new GlodaSyntheticView({
-    collection: cleanCollection,
-  });
-
   tabmail.openTab("mail3PaneTab", {
-    syntheticView: view,
+    folder,
+    searchSession: session,
     background: false,
   });
 }
