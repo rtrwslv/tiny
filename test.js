@@ -1,4 +1,4 @@
-async function collectReplyCollection(msgHdr) {
+async function collectRepliesForSyntheticView(msgHdr) {
   if (!msgHdr) {
     return null;
   }
@@ -39,7 +39,6 @@ async function collectReplyCollection(msgHdr) {
   const originalId = msgHdr.messageId;
 
   const seen = new Set();
-
   const myEmails = new Set(
     Array.from(MailServices.accounts.allIdentities)
       .map(i => i.email?.toLowerCase())
@@ -56,24 +55,19 @@ async function collectReplyCollection(msgHdr) {
 
     const id = hdr.messageId;
 
-    // dedupe across folders / gloda duplicates
-    const uniqueKey = id + "::" + hdr.folder?.URI;
-    if (seen.has(uniqueKey)) {
+    // 🔥 HARD DEDUPE (cross-folder safe)
+    const key = hdr.messageKey + "::" + hdr.folder?.URI;
+    if (seen.has(key)) {
       continue;
     }
-    seen.add(uniqueKey);
+    seen.add(key);
 
-    // exclude original message
+    // exclude original
     if (id === originalId) {
       continue;
     }
 
-    // only messages FROM others replying TO me (твоя логика)
-    const author = m.from?.value?.toLowerCase();
-    if (myEmails.has(author)) {
-      continue;
-    }
-
+    // optional: only real replies in thread
     const refs = hdr.getStringProperty("references") || "";
     const inReplyTo = hdr.getStringProperty("in-reply-to") || "";
 
@@ -85,11 +79,51 @@ async function collectReplyCollection(msgHdr) {
       continue;
     }
 
-    filtered.push(m);
+    filtered.push(hdr); // ⚠️ IMPORTANT: ONLY DBHDR, NO Gloda object
   }
 
+  // 🔥 FINAL SORT (deterministic, fixes “last = penultimate”)
+  filtered.sort((a, b) => {
+    if (a.date !== b.date) {
+      return a.date - b.date;
+    }
+    return a.messageKey - b.messageKey;
+  });
+
   return {
-    items: filtered,
+    items: filtered.map(hdr => ({
+      folderMessage: hdr,
+      messageKey: hdr.messageKey,
+      messageId: hdr.messageId,
+      date: hdr.date,
+    })),
     query: conversationCollection.query,
   };
+}
+
+
+function openRepliesSyntheticView(collection, tabmail) {
+  if (!collection?.items?.length) {
+    return;
+  }
+
+  // 🔥 IMPORTANT: fresh object identity (prevents Gloda reuse bugs)
+  const cleanCollection = {
+    items: collection.items.map(i => ({
+      folderMessage: i.folderMessage,
+      messageKey: i.messageKey,
+      messageId: i.messageId,
+      date: i.date,
+    })),
+    query: collection.query,
+  };
+
+  const view = new GlodaSyntheticView({
+    collection: cleanCollection,
+  });
+
+  tabmail.openTab("mail3PaneTab", {
+    syntheticView: view,
+    background: false,
+  });
 }
