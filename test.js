@@ -1,101 +1,72 @@
-function openConversation(msgHdr) {
-  const win = Services.wm.getMostRecentWindow("mail:3pane");
+/**
+ * Фильтрует threadTree так, чтобы показывались только сообщения
+ * из allowedIds. Остальные получают display:none через view-фильтр.
+ *
+ * @param {string[]} allowedIds - массив messageId для отображения
+ */
+function filterThreadTreeByMessageIds(allowedIds) {
+  const tabmail = document.getElementById("tabmail");
+  const tabInfo = tabmail?.currentTabInfo;
+  const win = tabInfo?.chromeBrowser?.contentWindow;
 
-  ConversationOpener.openConversationForMessages(
-    [msgHdr],
-    win
+  if (!win) {
+    console.error("Не удалось получить окно вкладки");
+    return;
+  }
+
+  const view = win.gDBView;
+  const threadTree = win.threadTree;
+
+  if (!view || !threadTree) {
+    console.error("gDBView или threadTree недоступны");
+    return;
+  }
+
+  // Нормализуем allowedIds в Set для быстрого lookup O(1)
+  const allowedSet = new Set(
+    allowedIds.map(id => id.replace(/^<|>$/g, "").trim())
   );
 
-  return win;
+  // ── Способ 1: через nsIMsgSearchSession (нативный фильтр view) ──
+  applyViewSearchFilter(win, view, threadTree, allowedSet);
 }
 
-function filterConversationView(win, allowedMessageIds) {
-  const tabmail = win.gTabmail;
+function applyViewSearchFilter(win, view, threadTree, allowedSet) {
+  const { MailServices } = ChromeUtils.importESModule(
+    "resource:///modules/MailServices.sys.mjs"
+  );
 
-  const waitForConversation = () => {
-    const tab = tabmail.currentTabInfo;
-    const browser = tab?.browser;
+  // Создаём сессию поиска
+  const searchSession = Cc["@mozilla.org/messenger/searchSession;1"]
+    .createInstance(Ci.nsIMsgSearchSession);
 
-    if (!browser || !browser.contentDocument) {
-      setTimeout(waitForConversation, 50);
-      return;
-    }
+  // Добавляем кастомный term через JS-реализацию nsIMsgSearchTerm
+  // В TB145 можно использовать view.setJSCustomFilter (если доступен)
+  // Либо патчим viewWrapper напрямую
 
-    const doc = browser.contentDocument;
+  const viewWrapper = win.gViewWrapper;
 
-    // 💥 ищем все сообщения в conversation
-    const messages = doc.querySelectorAll("[data-message-id]");
+  if (!viewWrapper) {
+    console.warn("gViewWrapper недоступен, используем DOM-подход");
+    applyDOMFilter(threadTree, view, allowedSet);
+    return;
+  }
 
-    if (!messages.length) {
-      setTimeout(waitForConversation, 50);
-      return;
-    }
+  // Сохраняем оригинальный фильтр если есть
+  viewWrapper._customFilter_original = viewWrapper._customFilter ?? null;
 
-    for (const el of messages) {
-      const id = el.getAttribute("data-message-id");
+  // Устанавливаем кастомный фильтр
+  viewWrapper.search = {
+    ...viewWrapper.search,
 
-      if (!allowedMessageIds.has(id)) {
-        // 👉 скрываем лишние
-        el.style.display = "none";
-      } else {
-        el.style.display = "";
-      }
+    // Этот callback вызывается для каждой строки view
+    matches(msgHdr) {
+      const id = msgHdr?.messageId?.replace(/^<|>$/g, "").trim();
+      return allowedSet.has(id);
     }
   };
 
-  waitForConversation();
-}
-
-async function collectReplyIds(msgHdr) {
-  const glodaMsg = await new Promise((resolve, reject) => {
-    Gloda.getMessageCollectionForHeader(msgHdr, {
-      onItemsAdded() {},
-      onQueryCompleted(c) {
-        resolve(c.items[0] ?? null);
-      },
-      onQueryError(e) {
-        reject(e);
-      },
-    });
-  });
-
-  if (!glodaMsg?.conversation) {
-    return new Set();
-  }
-
-  const conv = await new Promise((resolve, reject) => {
-    glodaMsg.conversation.getMessagesCollection({
-      onItemsAdded() {},
-      onQueryCompleted(c) {
-        resolve(c);
-      },
-      onQueryError(e) {
-        reject(e);
-      },
-    });
-  });
-
-  const ids = new Set();
-  const originalId = msgHdr.messageId;
-
-  for (const m of conv.items) {
-    const hdr = m.folderMessage;
-    if (!hdr) continue;
-
-    const id = hdr.messageId;
-
-    if (id && id !== originalId) {
-      ids.add(id);
-    }
-  }
-
-  return ids;
-}
-
-async function openFilteredConversation(msgHdr) {
-  const ids = await collectReplyIds(msgHdr);
-
-  const win = openConversation(msgHdr);
-
-  filterConversationView(win, ids);
+  // Принудительно перестраиваем view
+  viewWrapper.refresh();
+  threadTree.invalidate();
 }
