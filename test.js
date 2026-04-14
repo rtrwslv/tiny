@@ -1,28 +1,27 @@
-appendTerms(aTermCreator, aTerms, aFilterValue) {
-  if (!aFilterValue?.enabled || !aFilterValue?.allowedSet) {
-    return;
-  }
+function installMessageIdFilter(win, set) {
+  allowedSet = set;
 
-  for (let id of aFilterValue.allowedSet) {
-    const term = aTermCreator.createTerm();
+  let dbView = win.gDBView;
+  if (!dbView) return;
 
-    // ✔ используем Custom, потому что MessageId нет в enum
-    term.attrib = Ci.nsMsgSearchAttrib.Custom;
+  // сохраняем оригинальный getter hdr
+  let origGetMsgHdr = dbView.getMsgHdrForViewIndex?.bind(dbView);
 
-    const value = term.value;
-    value.attrib = term.attrib;
+  if (!origGetMsgHdr) return;
 
-    // Message-ID как строка
-    value.str = id.replace(/^<|>$/g, "").trim();
+  dbView.getMsgHdrForViewIndex = function(index) {
+    let hdr = origGetMsgHdr(index);
 
-    term.value = value;
+    if (!hdr) return null;
 
-    // ✔ сравнение строк
-    term.op = Ci.nsMsgSearchOp.Contains;
+    let id = hdr.messageId?.replace(/^<|>$/g, "").trim();
 
-    // OR логика
-    term.booleanAnd = false;
+    if (!allowedSet.has(id)) {
+      return null; // ❗ полностью скрываем письмо
+    }
 
-    aTerms.push(term);
-  }
+    return hdr;
+  };
+
+  dbView.refreshView();
 }
