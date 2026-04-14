@@ -1,41 +1,27 @@
-QuickFilterManager.defineFilter({
-  name: "allowedIds",
+appendTerms(aTermCreator, aTerms, aFilterValue) {
+  if (!aFilterValue?.enabled || !aFilterValue?.allowedSet) {
+    return;
+  }
 
-  getDefaults() {
-    return {
-      enabled: false,
-      allowedSet: null,
-    };
-  },
+  for (let id of aFilterValue.allowedSet) {
+    const term = aTermCreator.createTerm();
 
-  /**
-   * 🔥 ВАЖНО: сюда превращаем allowedSet в search terms
-   */
-  appendTerms(terms, state) {
-    if (!state?.enabled || !state?.allowedSet) {
-      return;
-    }
+    term.attrib = Ci.nsMsgSearchAttrib.MessageId;
 
-    for (let id of state.allowedSet) {
-      terms.push({
-        term: {
-          attrib: Ci.nsMsgSearchAttrib.MessageId,
-          op: Ci.nsMsgSearchOp.Contains,
-          value: id,
-        },
-        booleanAnd: false, // OR между ID
-      });
-    }
-  },
-});
+    const value = term.value;
+    value.attrib = term.attrib;
 
-function applyAllowedIdsFilter(win, allowedSet) {
-  let qfb = win.QuickFilterBarMuxer;
+    // messageId сравниваем как строку
+    value.str = id.replace(/^<|>$/g, "").trim();
 
-  qfb.setFilterValue("allowedIds", {
-    enabled: true,
-    allowedSet,
-  });
+    term.value = value;
 
-  qfb.deferredUpdateSearch();
+    // важно: Contains (Message-Id не всегда точный match в IMAP)
+    term.op = Ci.nsMsgSearchOp.Contains;
+
+    // OR логика между всеми ID
+    term.booleanAnd = false;
+
+    aTerms.push(term);
+  }
 }
