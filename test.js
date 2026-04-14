@@ -1,23 +1,28 @@
-function waitForLoad(browser) {
-  return new Promise(resolve => {
-    if (browser.contentDocument?.readyState === "complete") {
-      resolve();
-      return;
+function applyMessageIdFilter(win, allowedSet) {
+  let doc = win.document;
+
+  function filter() {
+    let rows = doc.querySelectorAll("li, tr");
+
+    for (let row of rows) {
+      let hdr = row._message || row.messageHeader || row.msgHdr;
+
+      let id =
+        hdr?.messageId ||
+        hdr?.messageId?.replace(/^<|>$/g, "").trim();
+
+      if (!id) continue;
+
+      row.hidden = !allowedSet.has(id);
     }
-    browser.addEventListener("load", resolve, {
-      once: true,
-      capture: true
-    });
-  });
+  }
+
+  // первый проход
+  filter();
+
+  // поддержка lazy load / gloda render
+  let obs = new MutationObserver(filter);
+  obs.observe(doc.body, { childList: true, subtree: true });
+
+  return obs;
 }
-
-// Использование:
-tabmail.addEventListener("TabOpen", async (event) => {
-  const tabInfo = event.detail.tabInfo;
-  const browser = tabInfo.chromeBrowser;
-
-  await waitForLoad(browser);
-
-  const win = browser.contentWindow;
-  applyMessageIdFilter(win, allowedIds);
-});
