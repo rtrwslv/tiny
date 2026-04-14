@@ -1,28 +1,41 @@
-function applyMessageIdFilter(win, allowedSet) {
-  let doc = win.document;
+QuickFilterManager.defineFilter({
+  name: "allowedIds",
 
-  function filter() {
-    let rows = doc.querySelectorAll("li, tr");
+  getDefaults() {
+    return {
+      enabled: false,
+      allowedSet: null,
+    };
+  },
 
-    for (let row of rows) {
-      let hdr = row._message || row.messageHeader || row.msgHdr;
-
-      let id =
-        hdr?.messageId ||
-        hdr?.messageId?.replace(/^<|>$/g, "").trim();
-
-      if (!id) continue;
-
-      row.hidden = !allowedSet.has(id);
+  /**
+   * 🔥 ВАЖНО: сюда превращаем allowedSet в search terms
+   */
+  appendTerms(terms, state) {
+    if (!state?.enabled || !state?.allowedSet) {
+      return;
     }
-  }
 
-  // первый проход
-  filter();
+    for (let id of state.allowedSet) {
+      terms.push({
+        term: {
+          attrib: Ci.nsMsgSearchAttrib.MessageId,
+          op: Ci.nsMsgSearchOp.Contains,
+          value: id,
+        },
+        booleanAnd: false, // OR между ID
+      });
+    }
+  },
+});
 
-  // поддержка lazy load / gloda render
-  let obs = new MutationObserver(filter);
-  obs.observe(doc.body, { childList: true, subtree: true });
+function applyAllowedIdsFilter(win, allowedSet) {
+  let qfb = win.QuickFilterBarMuxer;
 
-  return obs;
+  qfb.setFilterValue("allowedIds", {
+    enabled: true,
+    allowedSet,
+  });
+
+  qfb.deferredUpdateSearch();
 }
