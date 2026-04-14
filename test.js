@@ -6,20 +6,21 @@ appendTerms(aTermCreator, aTerms, aFilterValue) {
   for (let id of aFilterValue.allowedSet) {
     const term = aTermCreator.createTerm();
 
-    term.attrib = Ci.nsMsgSearchAttrib.MessageId;
+    // ✔ используем Custom, потому что MessageId нет в enum
+    term.attrib = Ci.nsMsgSearchAttrib.Custom;
 
     const value = term.value;
     value.attrib = term.attrib;
 
-    // messageId сравниваем как строку
+    // Message-ID как строка
     value.str = id.replace(/^<|>$/g, "").trim();
 
     term.value = value;
 
-    // важно: Contains (Message-Id не всегда точный match в IMAP)
+    // ✔ сравнение строк
     term.op = Ci.nsMsgSearchOp.Contains;
 
-    // OR логика между всеми ID
+    // OR логика
     term.booleanAnd = false;
 
     aTerms.push(term);
