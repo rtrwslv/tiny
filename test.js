@@ -1,72 +1,30 @@
-/**
- * Фильтрует threadTree так, чтобы показывались только сообщения
- * из allowedIds. Остальные получают display:none через view-фильтр.
- *
- * @param {string[]} allowedIds - массив messageId для отображения
- */
-function filterThreadTreeByMessageIds(allowedIds) {
-  const tabmail = document.getElementById("tabmail");
-  const tabInfo = tabmail?.currentTabInfo;
-  const win = tabInfo?.chromeBrowser?.contentWindow;
+const viewWrapper = win.gViewWrapper;
 
-  if (!win) {
-    console.error("Не удалось получить окно вкладки");
-    return;
-  }
+// Сохраняем оригинальный search
+const originalSearch = viewWrapper.search;
 
-  const view = win.gDBView;
-  const threadTree = win.threadTree;
+// Подменяем с полным интерфейсом nsIMsgSearchSession
+viewWrapper.search = {
+  // ── методы которые вызывает DBViewWrapper ──
+  dissociateView(dbView) {},
+  associateView(dbView) {},
+  
+  // ── остальные методы интерфейса ──
+  addSearchTerm() {},
+  clearSearchTerms() {},
+  searchTerms: [],
+  
+  // ── наш кастомный фильтр ──
+  matches(msgHdr) {
+    const id = msgHdr?.messageId?.replace(/^<|>$/g, "").trim();
+    return allowedSet.has(id);
+  },
 
-  if (!view || !threadTree) {
-    console.error("gDBView или threadTree недоступны");
-    return;
-  }
+  // ── проксируем всё остальное на оригинал ──
+  ...( originalSearch ? {
+    get wrappedJSObject() { return originalSearch; }
+  } : {})
+};
 
-  // Нормализуем allowedIds в Set для быстрого lookup O(1)
-  const allowedSet = new Set(
-    allowedIds.map(id => id.replace(/^<|>$/g, "").trim())
-  );
-
-  // ── Способ 1: через nsIMsgSearchSession (нативный фильтр view) ──
-  applyViewSearchFilter(win, view, threadTree, allowedSet);
-}
-
-function applyViewSearchFilter(win, view, threadTree, allowedSet) {
-  const { MailServices } = ChromeUtils.importESModule(
-    "resource:///modules/MailServices.sys.mjs"
-  );
-
-  // Создаём сессию поиска
-  const searchSession = Cc["@mozilla.org/messenger/searchSession;1"]
-    .createInstance(Ci.nsIMsgSearchSession);
-
-  // Добавляем кастомный term через JS-реализацию nsIMsgSearchTerm
-  // В TB145 можно использовать view.setJSCustomFilter (если доступен)
-  // Либо патчим viewWrapper напрямую
-
-  const viewWrapper = win.gViewWrapper;
-
-  if (!viewWrapper) {
-    console.warn("gViewWrapper недоступен, используем DOM-подход");
-    applyDOMFilter(threadTree, view, allowedSet);
-    return;
-  }
-
-  // Сохраняем оригинальный фильтр если есть
-  viewWrapper._customFilter_original = viewWrapper._customFilter ?? null;
-
-  // Устанавливаем кастомный фильтр
-  viewWrapper.search = {
-    ...viewWrapper.search,
-
-    // Этот callback вызывается для каждой строки view
-    matches(msgHdr) {
-      const id = msgHdr?.messageId?.replace(/^<|>$/g, "").trim();
-      return allowedSet.has(id);
-    }
-  };
-
-  // Принудительно перестраиваем view
-  viewWrapper.refresh();
-  threadTree.invalidate();
-}
+// Теперь refresh() не падает
+viewWrapper.refresh();
