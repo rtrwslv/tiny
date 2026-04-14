@@ -1,30 +1,23 @@
-const viewWrapper = win.gViewWrapper;
+function waitForLoad(browser) {
+  return new Promise(resolve => {
+    if (browser.contentDocument?.readyState === "complete") {
+      resolve();
+      return;
+    }
+    browser.addEventListener("load", resolve, {
+      once: true,
+      capture: true
+    });
+  });
+}
 
-// Сохраняем оригинальный search
-const originalSearch = viewWrapper.search;
+// Использование:
+tabmail.addEventListener("TabOpen", async (event) => {
+  const tabInfo = event.detail.tabInfo;
+  const browser = tabInfo.chromeBrowser;
 
-// Подменяем с полным интерфейсом nsIMsgSearchSession
-viewWrapper.search = {
-  // ── методы которые вызывает DBViewWrapper ──
-  dissociateView(dbView) {},
-  associateView(dbView) {},
-  
-  // ── остальные методы интерфейса ──
-  addSearchTerm() {},
-  clearSearchTerms() {},
-  searchTerms: [],
-  
-  // ── наш кастомный фильтр ──
-  matches(msgHdr) {
-    const id = msgHdr?.messageId?.replace(/^<|>$/g, "").trim();
-    return allowedSet.has(id);
-  },
+  await waitForLoad(browser);
 
-  // ── проксируем всё остальное на оригинал ──
-  ...( originalSearch ? {
-    get wrappedJSObject() { return originalSearch; }
-  } : {})
-};
-
-// Теперь refresh() не падает
-viewWrapper.refresh();
+  const win = browser.contentWindow;
+  applyMessageIdFilter(win, allowedIds);
+});
