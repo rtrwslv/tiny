@@ -1,27 +1,21 @@
-function installMessageIdFilter(win, set) {
-  allowedSet = set;
+function installMessageIdFilter(win, allowedSet) {
+  let vw = win.gViewWrapper;
+  if (!vw) return;
 
-  let dbView = win.gDBView;
-  if (!dbView) return;
+  vw._customFilterFunction = function(msgHdr) {
+    if (!msgHdr) return false;
 
-  // сохраняем оригинальный getter hdr
-  let origGetMsgHdr = dbView.getMsgHdrForViewIndex?.bind(dbView);
+    let id =
+      msgHdr.messageId ||
+      msgHdr.getStringProperty?.("message-id");
 
-  if (!origGetMsgHdr) return;
+    if (!id) return false;
 
-  dbView.getMsgHdrForViewIndex = function(index) {
-    let hdr = origGetMsgHdr(index);
+    id = id.replace(/^<|>$/g, "").trim();
 
-    if (!hdr) return null;
-
-    let id = hdr.messageId?.replace(/^<|>$/g, "").trim();
-
-    if (!allowedSet.has(id)) {
-      return null; // ❗ полностью скрываем письмо
-    }
-
-    return hdr;
+    return allowedSet.has(id);
   };
 
-  dbView.refreshView();
+  // 🔥 триггер пересборки view
+  vw.refresh();
 }
