@@ -1,137 +1,51 @@
-/**
- * Возвращает PARTSTAT из первого VEVENT в itipItem.
- * @param {calIItipItem} itipItem
- * @returns {"ACCEPTED"|"DECLINED"|"TENTATIVE"|"UNKNOWN"}
- */
-function getReplyPartStat(itipItem) {
-  try {
-    for (const item of itipItem.getItemList()) {
-      // item — это calIEvent/calITodo
-      const attendees = item.getAttendees();
-      for (const att of attendees) {
-        const partStat = att.participationStatus; // "ACCEPTED", "DECLINED", "TENTATIVE", etc.
-        if (partStat && partStat !== "NEEDS-ACTION") {
-          return partStat;
-        }
-      }
-    }
-  } catch (e) {
-    console.error("CalInvitationPanel: could not read PARTSTAT", e);
-  }
-  return "UNKNOWN";
+/* === Hover multi-select checkbox === */
+
+/* Базовый чекбокс, скрыт по умолчанию */
+.thread-listbox-row .multi-select-checkbox {
+  display: none;
+  position: absolute;
+  inset-inline-start: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  z-index: 10;
+  cursor: pointer;
+  accent-color: var(--color-blue-50);
+  /* Поверх иконок отправителя */
+  background: var(--layout-background-1);
+  border-radius: 3px;
 }
 
-/**
- * Возвращает имя/адрес attendee из REPLY.
- * @param {calIItipItem} itipItem
- * @returns {string}
- */
-function getReplyAttendeeLabel(itipItem) {
-  try {
-    for (const item of itipItem.getItemList()) {
-      const attendees = item.getAttendees();
-      if (attendees.length > 0) {
-        const att = attendees[0];
-        return att.commonName || att.id?.replace(/^mailto:/i, "") || "";
-      }
-    }
-  } catch (e) {}
-  return "";
+/* Показываем чекбокс при наведении на строку,
+   ТОЛЬКО если есть активное открытое письмо */
+:root[hasOpenMessage] .thread-listbox-row:hover .multi-select-checkbox,
+/* Всегда показываем, если строка уже в multi-selection */
+.thread-listbox-row[multiselected] .multi-select-checkbox {
+  display: block;
 }
 
-/**
- * Возвращает COMMENT из первого VEVENT, если есть.
- * @param {calIItipItem} itipItem
- * @returns {string|null}
- */
-function getReplyComment(itipItem) {
-  try {
-    for (const item of itipItem.getItemList()) {
-      const comment = item.getProperty("COMMENT");
-      if (comment) {
-        return comment;
-      }
-    }
-  } catch (e) {}
-  return null;
+/* Если строка выбрана — чекбокс checked-стиль через атрибут */
+.thread-listbox-row[multiselected] .multi-select-checkbox {
+  display: block;
+  /* checked state управляется через JS .checked = true */
 }
 
+/* Сдвигаем контент строки чтобы не перекрывался с чекбоксом */
+:root[hasOpenMessage] .thread-listbox-row:hover .thread-card,
+.thread-listbox-row[multiselected] .thread-card {
+  padding-inline-start: 24px;
+}
 
-/**
- * Создаёт DOM-узел баннера статуса ответа.
- * Вызывается при method === "REPLY".
- *
- * @param {calIItipItem} itipItem
- * @param {Document} doc
- * @returns {Element}
- */
-function buildReplyStatusBanner(itipItem, doc) {
-  const partStat = getReplyPartStat(itipItem);   // "ACCEPTED" | "DECLINED" | "TENTATIVE" | "UNKNOWN"
-  const attendee = getReplyAttendeeLabel(itipItem);
-  const comment  = getReplyComment(itipItem);
+/* Плавность появления */
+.thread-listbox-row .multi-select-checkbox {
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
 
-  // Название события из первого item
-  let eventTitle = "";
-  try {
-    const items = itipItem.getItemList();
-    if (items.length > 0) {
-      eventTitle = items[0].title || "";
-    }
-  } catch (e) {}
-
-  // Выбираем иконку (используем встроенные SVG-иконки Thunderbird из chrome://messenger)
-  const iconMap = {
-    ACCEPTED:  "chrome://calendar/skin/icons/invitation-accepted.svg",
-    DECLINED:  "chrome://calendar/skin/icons/invitation-declined.svg",
-    TENTATIVE: "chrome://calendar/skin/icons/invitation-tentative.svg",
-    UNKNOWN:   "chrome://calendar/skin/icons/invitation-reply.svg",
-  };
-
-  // Выбираем Fluent-ключ
-  const hasComment = !!comment;
-  const ftlKeyMap = {
-    ACCEPTED:  hasComment ? "calendar-invitation-panel-reply-accepted-comment"
-                          : "calendar-invitation-panel-reply-accepted",
-    DECLINED:  hasComment ? "calendar-invitation-panel-reply-declined-comment"
-                          : "calendar-invitation-panel-reply-declined",
-    TENTATIVE: hasComment ? "calendar-invitation-panel-reply-tentative-comment"
-                          : "calendar-invitation-panel-reply-tentative",
-    UNKNOWN:   "calendar-invitation-panel-reply-unknown",
-  };
-
-  const banner = doc.createElement("div");
-  banner.classList.add("itip-reply-banner");
-  banner.setAttribute("status", partStat);
-
-  // Иконка
-  const icon = doc.createElement("img");
-  icon.classList.add("itip-reply-icon");
-  icon.src = iconMap[partStat] || iconMap.UNKNOWN;
-  icon.setAttribute("aria-hidden", "true");
-  banner.appendChild(icon);
-
-  // Текстовый контейнер
-  const textWrap = doc.createElement("div");
-  textWrap.style.flex = "1";
-
-  // Основной текст через Fluent
-  const mainText = doc.createElement("p");
-  mainText.style.margin = "0";
-  doc.l10n.setAttributes(mainText, ftlKeyMap[partStat] || ftlKeyMap.UNKNOWN, {
-    organizer: attendee,
-    title: eventTitle,
-  });
-  textWrap.appendChild(mainText);
-
-  // Комментарий, если есть
-  if (comment) {
-    const commentEl = doc.createElement("p");
-    commentEl.classList.add("itip-reply-comment");
-    commentEl.style.margin = "0";
-    commentEl.textContent = comment;
-    textWrap.appendChild(commentEl);
-  }
-
-  banner.appendChild(textWrap);
-  return banner;
+:root[hasOpenMessage] .thread-listbox-row:hover .multi-select-checkbox,
+.thread-listbox-row[multiselected] .multi-select-checkbox {
+  opacity: 1;
 }
